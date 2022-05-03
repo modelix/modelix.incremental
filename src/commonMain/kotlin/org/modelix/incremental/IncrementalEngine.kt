@@ -1,6 +1,6 @@
 package org.modelix.incremental
 
-class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyTrackingListener {
+class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyListener {
 
     private val graph = DependencyGraph<IDependencyKey>()
     private var activeEvaluation: Evaluation? = null
@@ -10,7 +10,12 @@ class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyTrackin
     }
 
     override fun <T> compute(task: ComputationTask<T>): T {
-        val evaluation = Evaluation(EngineValueDependency(this, task.key), task)
+        val engineValueKey = EngineValueDependency(this, task.key)
+        val value = graph.getValue(engineValueKey)
+        if (value?.getState() == ERecomputableValueState.VALID) {
+            return value.getValue() as T
+        }
+        val evaluation = Evaluation(engineValueKey, task)
         val previousEvaluation = activeEvaluation
         try {
             activeEvaluation = evaluation
@@ -23,7 +28,7 @@ class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyTrackin
         }
     }
 
-    override fun <T> observe(task: ComputationTask<T>): IObservedValue<T> {
+    override fun <T> observe(task: ComputationTask<T>): TrackedValue<T> {
         TODO("Not yet implemented")
     }
 
@@ -33,10 +38,10 @@ class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyTrackin
     }
 
     override fun modified(key: IDependencyKey) {
-        val value = graph.getValue(key) ?: return
-        if (value.getState() == ERecomputableValueState.INVALID) return
-        value.invalidate()
-        invalidateReverseDependencies(key)
+        val deps = graph.getReverseDependencies(key)
+        for (dep in deps) {
+            invalidateReverseDependencies(dep)
+        }
     }
 
     private fun invalidateReverseDependencies(key: IDependencyKey) {

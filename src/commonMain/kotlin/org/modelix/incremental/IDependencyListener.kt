@@ -1,6 +1,6 @@
 package org.modelix.incremental
 
-interface IDependencyTrackingListener {
+interface IDependencyListener {
     fun accessed(key: IDependencyKey)
     fun modified(key: IDependencyKey)
 }
