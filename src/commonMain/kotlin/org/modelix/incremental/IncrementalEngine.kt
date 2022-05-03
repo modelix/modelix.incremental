@@ -2,25 +2,30 @@ package org.modelix.incremental
 
 class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyListener {
 
-    private val graph = DependencyGraph<IDependencyKey>()
+    private val graph = DependencyGraph(this)
     private var activeEvaluation: Evaluation? = null
 
     init {
         DependencyTracking.registerListener(this)
     }
 
-    override fun <T> compute(task: ComputationTask<T>): T {
-        val engineValueKey = EngineValueDependency(this, task.key)
-        val value = graph.getValue(engineValueKey)
-        if (value?.getState() == ERecomputableValueState.VALID) {
-            return value.getValue() as T
+    override fun <T> compute(call: IncrementalFunctionCall<T>): T {
+        val engineValueKey = EngineValueDependency(this, call)
+        var entry = graph.getValue(engineValueKey)
+        if (entry != null) {
+            if (entry.getState() == ERecomputableValueState.VALID) {
+                return entry.getValue() as T
+            }
+        } else {
+            entry = RecomputableValue(call)
+            graph.setValue(engineValueKey, entry)
         }
-        val evaluation = Evaluation(engineValueKey, task)
+        val evaluation = Evaluation(engineValueKey, call)
         val previousEvaluation = activeEvaluation
         try {
             activeEvaluation = evaluation
-            val value = task.value.recompute()
-            graph.setValue(evaluation.key, task.value)
+            val value: T = entry.recompute() as T
+            graph.setValue(evaluation.key, entry)
             graph.setDependencies(evaluation.key, evaluation.dependencies)
             return value
         } finally {
@@ -28,7 +33,7 @@ class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyListene
         }
     }
 
-    override fun <T> observe(task: ComputationTask<T>): TrackedValue<T> {
+    override fun <T> observe(call: IncrementalFunctionCall<T>): TrackedValue<T> {
         TODO("Not yet implemented")
     }
 
@@ -65,7 +70,7 @@ class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyListene
         return null
     }
 
-    inner class Evaluation(val key: EngineValueDependency, val task: ComputationTask<*>) {
+    inner class Evaluation(val key: EngineValueDependency, val call: IncrementalFunctionCall<*>) {
         val dependencies: MutableSet<IDependencyKey> = HashSet()
     }
 }

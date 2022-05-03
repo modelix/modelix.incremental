@@ -1,6 +1,6 @@
 package org.modelix.incremental
 
-class RecomputableValue<E>(val function: (context: IIncrementalFunctionContext<E>)->E) : IIncrementalFunctionContext<E> {
+class RecomputableValue<E>(val call: IncrementalFunctionCall<E>) : IIncrementalFunctionContext<E> {
     private var value: E? = null
     private var state: ERecomputableValueState = ERecomputableValueState.NEW
 
@@ -20,7 +20,7 @@ class RecomputableValue<E>(val function: (context: IIncrementalFunctionContext<E
     }
 
     fun recompute(): E {
-        val recomputed = function(this)
+        val recomputed = call.invoke(this)
         value = recomputed
         state = ERecomputableValueState.VALID
         return recomputed

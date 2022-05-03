@@ -1,31 +1,36 @@
 package org.modelix.incremental
 
-class DependencyGraph<KeyT> {
-    private val nodes: MutableMap<KeyT, Node> = HashMap()
+/**
+ * Not thread-safe.
+ */
+class DependencyGraph(val engine: IncrementalEngine) {
+    private val nodes: MutableMap<IDependencyKey, Node> = HashMap()
 
-    private fun getOrAddNode(key: KeyT) = nodes.getOrPut(key) { Node(key) }
-
-    fun setValue(key: KeyT, value: RecomputableValue<*>) {
-        getOrAddNode(key).value = value
+    private fun getOrAddNode(key: IDependencyKey): Node = nodes.getOrPut(key) {
+        if (key is EngineValueDependency && key.engine == engine) ComputedNode(key) else InputNode(key)
     }
 
-    fun getValue(key: KeyT): RecomputableValue<*>? = nodes[key]?.value
+    fun setValue(key: IDependencyKey, value: RecomputableValue<*>) {
+        (getOrAddNode(key) as ComputedNode).value = value
+    }
 
-    fun getDependencies(from: KeyT): Set<KeyT> {
+    fun getValue(key: IDependencyKey): RecomputableValue<*>? = (nodes[key] as ComputedNode?)?.value
+
+    fun getDependencies(from: IDependencyKey): Set<IDependencyKey> {
         val fromNode = nodes[from] ?: return emptySet()
         return fromNode.getDependencies().asSequence().map { it.key }.toSet()
     }
 
-    fun getReverseDependencies(from: KeyT): Set<KeyT> {
+    fun getReverseDependencies(from: IDependencyKey): Set<IDependencyKey> {
         val fromNode = nodes[from] ?: return emptySet()
         return fromNode.getReverseDependencies().asSequence().map { it.key }.toSet()
     }
 
-    fun setDependencies(from: KeyT, to: Set<KeyT>) {
+    fun setDependencies(from: IDependencyKey, to: Set<IDependencyKey>) {
         val fromNode = getOrAddNode(from)
         val current = fromNode.getDependencies().asSequence().map { it.key }.toSet()
-        val addedDeps: Set<KeyT> = to - current
-        val removedDeps: Set<KeyT> = current - to
+        val addedDeps: Set<IDependencyKey> = to - current
+        val removedDeps: Set<IDependencyKey> = current - to
         for (dep in removedDeps) {
             fromNode.removeDependency(getOrAddNode(dep))
         }
@@ -34,20 +39,19 @@ class DependencyGraph<KeyT> {
         }
     }
 
-    fun addDependency(from: KeyT, to: KeyT) {
+    fun addDependency(from: IDependencyKey, to: IDependencyKey) {
         getOrAddNode(from).addDependency(getOrAddNode(to))
     }
 
-    fun removeDependency(from: KeyT, to: KeyT) {
+    fun removeDependency(from: IDependencyKey, to: IDependencyKey) {
         val fromNode = nodes[from] ?: return
         val toNode = nodes[to] ?: return
         fromNode.removeDependency(toNode)
     }
 
-    fun contains(key: KeyT) = nodes.containsKey(key)
+    fun contains(key: IDependencyKey) = nodes.containsKey(key)
 
-    private inner class Node(val key: KeyT) {
-        var value: RecomputableValue<*>? = null
+    private open inner class Node(val key: IDependencyKey) {
         private val reverseDependencies: MutableSet<Node> = HashSet()
         private val dependencies: MutableSet<Node> = HashSet()
 
@@ -84,6 +88,15 @@ class DependencyGraph<KeyT> {
         fun isRoot() = reverseDependencies.isEmpty()
 
         fun isConnected() = dependencies.isNotEmpty() || reverseDependencies.isNotEmpty()
+
+    }
+
+    private inner class InputNode(key: IDependencyKey) : Node(key) {
+
+    }
+
+    private inner class ComputedNode(key: IDependencyKey) : Node(key) {
+        var value: RecomputableValue<*>? = null
     }
 }
 

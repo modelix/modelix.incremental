@@ -1,6 +1,8 @@
 package org.modelix.incremental
 
+typealias ComputationKey = Any
+
 interface IIncrementalEngine {
-    fun <T> compute(task: ComputationTask<T>): T
-    fun <T> observe(task: ComputationTask<T>): TrackedValue<T>
+    fun <T> compute(call: IncrementalFunctionCall<T>): T
+    fun <T> observe(call: IncrementalFunctionCall<T>): TrackedValue<T>
 }
