@@ -1,6 +1,6 @@
 package org.modelix.incremental
 
-class TrackedValue<E>(initialValue: E) : IDependencyKey {
+class TrackableValue<E>(initialValue: E) : IDependencyKey {
     private var value: E = initialValue
 
     fun getValue(): E {
