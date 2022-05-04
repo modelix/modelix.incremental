@@ -6,15 +6,11 @@ package org.modelix.incremental
 class DependencyGraph(val engine: IncrementalEngine) {
     private val nodes: MutableMap<IDependencyKey, Node> = HashMap()
 
-    private fun getOrAddNode(key: IDependencyKey): Node = nodes.getOrPut(key) {
+    fun getNode(key: IDependencyKey): Node? = nodes[key]
+
+    fun getOrAddNode(key: IDependencyKey): Node = nodes.getOrPut(key) {
         if (key is EngineValueDependency && key.engine == engine) ComputedNode(key) else InputNode(key)
     }
-
-    fun setValue(key: IDependencyKey, value: RecomputableValue<*>) {
-        (getOrAddNode(key) as ComputedNode).value = value
-    }
-
-    fun getValue(key: IDependencyKey): RecomputableValue<*>? = (nodes[key] as ComputedNode?)?.value
 
     fun getDependencies(from: IDependencyKey): Set<IDependencyKey> {
         val fromNode = nodes[from] ?: return emptySet()
@@ -51,7 +47,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
     fun contains(key: IDependencyKey) = nodes.containsKey(key)
 
-    private open inner class Node(val key: IDependencyKey) {
+    open inner class Node(val key: IDependencyKey) {
         private val reverseDependencies: MutableSet<Node> = HashSet()
         private val dependencies: MutableSet<Node> = HashSet()
 
@@ -89,14 +85,44 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
         fun isConnected() = dependencies.isNotEmpty() || reverseDependencies.isNotEmpty()
 
+        open fun invalidate() {
+            for (dep in getReverseDependencies()) {
+                dep.dependencyInvalidated()
+            }
+        }
+
+        open fun dependencyInvalidated() {
+            for (dep in getReverseDependencies()) {
+                dep.dependencyInvalidated()
+            }
+        }
+
     }
 
-    private inner class InputNode(key: IDependencyKey) : Node(key) {
+    inner class InputNode(key: IDependencyKey) : Node(key) {
 
     }
 
-    private inner class ComputedNode(key: IDependencyKey) : Node(key) {
-        var value: RecomputableValue<*>? = null
+    inner class ComputedNode(key: EngineValueDependency) : Node(key) {
+        private val value: CacheEntry<*> = CacheEntry(key.call)
+        fun getState(): ECacheEntryState = value.getState()
+        fun getValue(): Any? = value.getValue()
+        fun recompute(): Any? = value.recompute()
+        override fun dependencyInvalidated() {
+            val wasValid = getState() == ECacheEntryState.VALID
+            value.dependencyInvalidated()
+            if (wasValid) {
+                super.dependencyInvalidated()
+            }
+        }
+
+        override fun invalidate() {
+            val wasValid = getState() == ECacheEntryState.VALID
+            value.invalidate()
+            if (wasValid) {
+                super.invalidate()
+            }
+        }
     }
 }
 

@@ -11,22 +11,16 @@ class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyListene
 
     override fun <T> compute(call: IncrementalFunctionCall<T>): T {
         val engineValueKey = EngineValueDependency(this, call)
-        var entry = graph.getValue(engineValueKey)
-        if (entry != null) {
-            if (entry.getState() == ERecomputableValueState.VALID) {
-                return entry.getValue() as T
-            }
-        } else {
-            entry = RecomputableValue(call)
-            graph.setValue(engineValueKey, entry)
+        val node = graph.getOrAddNode(engineValueKey) as DependencyGraph.ComputedNode
+        if (node.getState() == ECacheEntryState.VALID) {
+            return node.getValue() as T
         }
         val evaluation = Evaluation(engineValueKey, call)
         val previousEvaluation = activeEvaluation
         try {
             activeEvaluation = evaluation
-            val value: T = entry.recompute() as T
-            graph.setValue(evaluation.key, entry)
-            graph.setDependencies(evaluation.key, evaluation.dependencies)
+            val value: T = node.recompute() as T
+            graph.setDependencies(engineValueKey, evaluation.dependencies)
             return value
         } finally {
             activeEvaluation = previousEvaluation
@@ -43,23 +37,8 @@ class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyListene
     }
 
     override fun modified(key: IDependencyKey) {
-        val deps = graph.getReverseDependencies(key)
-        for (dep in deps) {
-            invalidateReverseDependencies(dep)
-        }
-    }
-
-    private fun invalidateReverseDependencies(key: IDependencyKey) {
-        val value = graph.getValue(key) ?: return
-        when (value.getState()) {
-            ERecomputableValueState.VALID -> {
-                value.dependencyInvalidated()
-                for (reverseDependency in graph.getReverseDependencies(key)) {
-                    invalidateReverseDependencies(reverseDependency)
-                }
-            }
-            ERecomputableValueState.INVALID, ERecomputableValueState.DEPENDENCY_INVALID -> {}
-        }
+        val node = graph.getNode(key) ?: return
+        node.invalidate()
     }
 
     fun dispose() {
