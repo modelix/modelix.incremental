@@ -11,6 +11,7 @@ class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyListene
 
     override fun <T> compute(call: IncrementalFunctionCall<T>): T {
         val engineValueKey = EngineValueDependency(this, call)
+        DependencyTracking.accessed(engineValueKey)
         val node = graph.getOrAddNode(engineValueKey) as DependencyGraph.ComputedNode
         if (node.getState() == ECacheEntryState.VALID) {
             return node.getValue() as T

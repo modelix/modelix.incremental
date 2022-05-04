@@ -19,7 +19,7 @@ class IncrementalMathTest {
     }
 
     @Test
-    fun test() {
+    fun simpleCachingTest() {
         val values = (1..10).map { TrackedValue(it) }
         var numInvocations = 0
         val sum = engine.incrementalFunction<Int> { context ->
@@ -34,4 +34,26 @@ class IncrementalMathTest {
         assertEquals(2, numInvocations)
     }
 
+    @Test
+    fun transitiveDependencies() {
+        val a = TrackedValue(10)
+        val b = TrackedValue(5)
+        val c = engine.incrementalFunction<Int> {
+            a.getValue() + b.getValue()
+        }
+        val d = engine.incrementalFunction<Int> {
+            a.getValue() - b.getValue()
+        }
+        val e = engine.incrementalFunction<Int> {
+            c() * d()
+        }
+
+        assertEquals((10 + 5) * (10 - 5), e())
+        assertEquals(10 + 5, c())
+        assertEquals(10 - 5, d())
+        a.setValue(11)
+        assertEquals(11 + 5, c())
+        assertEquals(11 - 5, d())
+        assertEquals((11 + 5) * (11 - 5), e())
+    }
 }
