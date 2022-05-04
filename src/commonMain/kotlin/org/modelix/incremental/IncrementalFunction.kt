@@ -1,56 +1,134 @@
 package org.modelix.incremental
 
-abstract class IncrementalFunctionCall<RetT> {
+abstract class IncrementalFunctionImplementation<RetT>(
+    val name: String
+) {
+    open fun getDefaultValue(): Optional<RetT> = Optional.empty()
+}
+
+class IncrementalFunctionImplementation0<RetT>(
+    name: String,
+    val function: (IIncrementalFunctionContext<RetT>) -> RetT,
+) : IncrementalFunctionImplementation<RetT>(name) {
+    fun invoke(context: IIncrementalFunctionContext<RetT>): RetT = function(context)
+}
+
+class IncrementalFunctionImplementation1<RetT, P1>(
+    name: String,
+    val function: (IIncrementalFunctionContext<RetT>, P1) -> RetT,
+) : IncrementalFunctionImplementation<RetT>(name) {
+    fun invoke(context: IIncrementalFunctionContext<RetT>, p1: P1): RetT = function(context, p1)
+}
+
+class IncrementalFunctionImplementation2<RetT, P1, P2>(
+    name: String,
+    val function: (IIncrementalFunctionContext<RetT>, P1, P2) -> RetT,
+) : IncrementalFunctionImplementation<RetT>(name) {
+    fun invoke(context: IIncrementalFunctionContext<RetT>, p1: P1, p2: P2): RetT = function(context, p1, p2)
+}
+
+class IncrementalFunctionImplementation3<RetT, P1, P2, P3>(
+    name: String,
+    val function: (IIncrementalFunctionContext<RetT>, P1, P2, P3) -> RetT,
+) : IncrementalFunctionImplementation<RetT>(name) {
+    fun invoke(context: IIncrementalFunctionContext<RetT>, p1: P1, p2: P2, p3: P3): RetT = function(context, p1, p2, p3)
+}
+
+class IncrementalFunctionImplementation4<RetT, P1, P2, P3, P4>(
+    name: String,
+    val function: (IIncrementalFunctionContext<RetT>, P1, P2, P3, P4) -> RetT,
+) : IncrementalFunctionImplementation<RetT>(name) {
+    fun invoke(context: IIncrementalFunctionContext<RetT>, p1: P1, p2: P2, p3: P3, p4: P4): RetT = function(context, p1, p2, p3, p4)
+}
+
+class IncrementalFunctionImplementation5<RetT, P1, P2, P3, P4, P5>(
+    name: String,
+    val function: (IIncrementalFunctionContext<RetT>, P1, P2, P3, P4, P5) -> RetT,
+) : IncrementalFunctionImplementation<RetT>(name) {
+    fun invoke(context: IIncrementalFunctionContext<RetT>, p1: P1, p2: P2, p3: P3, p4: P4, p5: P5): RetT = function(context, p1, p2, p3, p4, p5)
+}
+
+class IncrementalFunctionImplementation6<RetT, P1, P2, P3, P4, P5, P6>(
+    name: String,
+    val function: (IIncrementalFunctionContext<RetT>, P1, P2, P3, P4, P5, P6) -> RetT,
+) : IncrementalFunctionImplementation<RetT>(name) {
+    fun invoke(context: IIncrementalFunctionContext<RetT>, p1: P1, p2: P2, p3: P3, p4: P4, p5: P5, p6: P6): RetT = function(context, p1, p2, p3, p4, p5, p6)
+}
+
+/**
+ * @param defaultValue Is used when a dependency cycle is detected.
+ */
+abstract class IncrementalFunctionCall<RetT>() {
     /**
      * Shouldn't be invoked directly. Use IIncrementalEngine.compute(...) instead.
      */
     abstract fun invoke(context: IIncrementalFunctionContext<RetT>): RetT
 }
-data class IncrementalFunctionCall0<RetT>(val function: (IIncrementalFunctionContext<RetT>) -> RetT) : IncrementalFunctionCall<RetT>() {
-    override fun invoke(context: IIncrementalFunctionContext<RetT>): RetT = function(context)
+data class IncrementalFunctionCall0<RetT>(
+    val function: IncrementalFunctionImplementation0<RetT>,
+) : IncrementalFunctionCall<RetT>() {
+    override fun invoke(context: IIncrementalFunctionContext<RetT>): RetT = function.invoke(context)
+    override fun toString(): String {
+        return "${function.name}()"
+    }
 }
 data class IncrementalFunctionCall1<RetT, P1>(
-    val function: (IIncrementalFunctionContext<RetT>, P1) -> RetT,
+    val function: IncrementalFunctionImplementation1<RetT, P1>,
     val p1: P1,
 ) : IncrementalFunctionCall<RetT>() {
-    override fun invoke(context: IIncrementalFunctionContext<RetT>): RetT = function(context, p1)
+    override fun invoke(context: IIncrementalFunctionContext<RetT>): RetT = function.invoke(context, p1)
+    override fun toString(): String {
+        return "${function.name}($p1)"
+    }
 }
 data class IncrementalFunctionCall2<RetT, P1, P2>(
-    val function: (IIncrementalFunctionContext<RetT>, P1, P2) -> RetT,
+    val function: IncrementalFunctionImplementation2<RetT, P1, P2>,
     val p1: P1,
     val p2: P2,
 ) : IncrementalFunctionCall<RetT>() {
-    override fun invoke(context: IIncrementalFunctionContext<RetT>): RetT = function(context, p1, p2)
+    override fun invoke(context: IIncrementalFunctionContext<RetT>): RetT = function.invoke(context, p1, p2)
+    override fun toString(): String {
+        return "${function.name}($p1, $p2)"
+    }
 }
 data class IncrementalFunctionCall3<RetT, P1, P2, P3>(
-    val function: (IIncrementalFunctionContext<RetT>, P1, P2, P3) -> RetT,
+    val function: IncrementalFunctionImplementation3<RetT, P1, P2, P3>,
     val p1: P1,
     val p2: P2,
     val p3: P3,
 ) : IncrementalFunctionCall<RetT>() {
-    override fun invoke(context: IIncrementalFunctionContext<RetT>): RetT = function(context, p1, p2, p3)
+    override fun invoke(context: IIncrementalFunctionContext<RetT>): RetT = function.invoke(context, p1, p2, p3)
+    override fun toString(): String {
+        return "${function.name}($p1, $p2, $p3)"
+    }
 }
 data class IncrementalFunctionCall4<RetT, P1, P2, P3, P4>(
-    val function: (IIncrementalFunctionContext<RetT>, P1, P2, P3, P4) -> RetT,
+    val function: IncrementalFunctionImplementation4<RetT, P1, P2, P3, P4>,
     val p1: P1,
     val p2: P2,
     val p3: P3,
     val p4: P4,
 ) : IncrementalFunctionCall<RetT>() {
-    override fun invoke(context: IIncrementalFunctionContext<RetT>): RetT = function(context, p1, p2, p3, p4)
+    override fun invoke(context: IIncrementalFunctionContext<RetT>): RetT = function.invoke(context, p1, p2, p3, p4)
+    override fun toString(): String {
+        return "${function.name}($p1, $p2, $p3, $p4)"
+    }
 }
 data class IncrementalFunctionCall5<RetT, P1, P2, P3, P4, P5>(
-    val function: (IIncrementalFunctionContext<RetT>, P1, P2, P3, P4, P5) -> RetT,
+    val function: IncrementalFunctionImplementation5<RetT, P1, P2, P3, P4, P5>,
     val p1: P1,
     val p2: P2,
     val p3: P3,
     val p4: P4,
     val p5: P5,
 ) : IncrementalFunctionCall<RetT>() {
-    override fun invoke(context: IIncrementalFunctionContext<RetT>): RetT = function(context, p1, p2, p3, p4, p5)
+    override fun invoke(context: IIncrementalFunctionContext<RetT>): RetT = function.invoke(context, p1, p2, p3, p4, p5)
+    override fun toString(): String {
+        return "${function.name}($p1, $p2, $p3, $p4, $p5)"
+    }
 }
 data class IncrementalFunctionCall6<RetT, P1, P2, P3, P4, P5, P6>(
-    val function: (IIncrementalFunctionContext<RetT>, P1, P2, P3, P4, P5, P6) -> RetT,
+    val function: IncrementalFunctionImplementation6<RetT, P1, P2, P3, P4, P5, P6>,
     val p1: P1,
     val p2: P2,
     val p3: P3,
@@ -58,27 +136,40 @@ data class IncrementalFunctionCall6<RetT, P1, P2, P3, P4, P5, P6>(
     val p5: P5,
     val p6: P6,
 ) : IncrementalFunctionCall<RetT>() {
-    override fun invoke(context: IIncrementalFunctionContext<RetT>): RetT = function(context, p1, p2, p3, p4, p5, p6)
+    override fun invoke(context: IIncrementalFunctionContext<RetT>): RetT = function.invoke(context, p1, p2, p3, p4, p5, p6)
+    override fun toString(): String {
+        return "${function.name}($p1, $p2, $p3, $p4, $p5, $p6)"
+    }
 }
 
-fun <RetT> IIncrementalEngine.incrementalFunction(body: (IIncrementalFunctionContext<RetT>)->RetT): () -> RetT {
-    return { this.compute(IncrementalFunctionCall0(body)) }
+fun <RetT> IIncrementalEngine.incrementalFunction(name: String, body: (IIncrementalFunctionContext<RetT>)->RetT): () -> RetT {
+    val impl = IncrementalFunctionImplementation0(name, body)
+    val call = IncrementalFunctionCall0(impl)
+    return { this.compute(call) }
 }
-fun <RetT, P1> IIncrementalEngine.incrementalFunction(body: (IIncrementalFunctionContext<RetT>, P1)->RetT): (P1) -> RetT {
-    return { p1 -> this.compute(IncrementalFunctionCall1(body, p1)) }
+
+fun <RetT, P1> IIncrementalEngine.incrementalFunction(name: String, body: (IIncrementalFunctionContext<RetT>, P1)->RetT): (P1) -> RetT {
+    val impl = IncrementalFunctionImplementation1(name, body)
+    return { p1 -> this.compute(IncrementalFunctionCall1(impl, p1)) }
 }
-fun <RetT, P1, P2> IIncrementalEngine.incrementalFunction(body: (IIncrementalFunctionContext<RetT>, P1, P2)->RetT): (P1, P2) -> RetT {
-    return { p1, p2 -> this.compute(IncrementalFunctionCall2(body, p1, p2)) }
+
+fun <RetT, P1, P2> IIncrementalEngine.incrementalFunction(name: String, body: (IIncrementalFunctionContext<RetT>, P1, P2)->RetT): (P1, P2) -> RetT {
+    val impl = IncrementalFunctionImplementation2(name, body)
+    return { p1, p2 -> this.compute(IncrementalFunctionCall2(impl, p1, p2)) }
 }
-fun <RetT, P1, P2, P3> IIncrementalEngine.incrementalFunction(body: (IIncrementalFunctionContext<RetT>, P1, P2, P3)->RetT): (P1, P2, P3) -> RetT {
-    return { p1, p2, p3 -> this.compute(IncrementalFunctionCall3(body, p1, p2, p3)) }
+fun <RetT, P1, P2, P3> IIncrementalEngine.incrementalFunction(name: String, body: (IIncrementalFunctionContext<RetT>, P1, P2, P3)->RetT): (P1, P2, P3) -> RetT {
+    val impl = IncrementalFunctionImplementation3(name, body)
+    return { p1, p2, p3 -> this.compute(IncrementalFunctionCall3(impl, p1, p2, p3)) }
 }
-fun <RetT, P1, P2, P3, P4> IIncrementalEngine.incrementalFunction(body: (IIncrementalFunctionContext<RetT>, P1, P2, P3, P4)->RetT): (P1, P2, P3, P4) -> RetT {
-    return { p1, p2, p3, p4 -> this.compute(IncrementalFunctionCall4(body, p1, p2, p3, p4)) }
+fun <RetT, P1, P2, P3, P4> IIncrementalEngine.incrementalFunction(name: String, body: (IIncrementalFunctionContext<RetT>, P1, P2, P3, P4)->RetT): (P1, P2, P3, P4) -> RetT {
+    val impl = IncrementalFunctionImplementation4(name, body)
+    return { p1, p2, p3, p4 -> this.compute(IncrementalFunctionCall4(impl, p1, p2, p3, p4)) }
 }
-fun <RetT, P1, P2, P3, P4, P5> IIncrementalEngine.incrementalFunction(body: (IIncrementalFunctionContext<RetT>, P1, P2, P3, P4, P5)->RetT): (P1, P2, P3, P4, P5) -> RetT {
-    return { p1, p2, p3, p4, p5 -> this.compute(IncrementalFunctionCall5(body, p1, p2, p3, p4, p5)) }
+fun <RetT, P1, P2, P3, P4, P5> IIncrementalEngine.incrementalFunction(name: String, body: (IIncrementalFunctionContext<RetT>, P1, P2, P3, P4, P5)->RetT): (P1, P2, P3, P4, P5) -> RetT {
+    val impl = IncrementalFunctionImplementation5(name, body)
+    return { p1, p2, p3, p4, p5 -> this.compute(IncrementalFunctionCall5(impl, p1, p2, p3, p4, p5)) }
 }
-fun <RetT, P1, P2, P3, P4, P5, P6> IIncrementalEngine.incrementalFunction(body: (IIncrementalFunctionContext<RetT>, P1, P2, P3, P4, P5, P6)->RetT): (P1, P2, P3, P4, P5, P6) -> RetT {
-    return { p1, p2, p3, p4, p5, p6 -> this.compute(IncrementalFunctionCall6(body, p1, p2, p3, p4, p5, p6)) }
+fun <RetT, P1, P2, P3, P4, P5, P6> IIncrementalEngine.incrementalFunction(name: String, body: (IIncrementalFunctionContext<RetT>, P1, P2, P3, P4, P5, P6)->RetT): (P1, P2, P3, P4, P5, P6) -> RetT {
+    val impl = IncrementalFunctionImplementation6(name, body)
+    return { p1, p2, p3, p4, p5, p6 -> this.compute(IncrementalFunctionCall6(impl, p1, p2, p3, p4, p5, p6)) }
 }

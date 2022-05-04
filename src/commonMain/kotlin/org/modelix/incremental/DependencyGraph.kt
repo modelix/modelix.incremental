@@ -107,7 +107,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
         private val value: CacheEntry<*> = CacheEntry(key.call)
         fun getState(): ECacheEntryState = value.getState()
         fun getValue(): Any? = value.getValue()
-        fun recompute(): Any? = value.recompute()
+        fun validate(): Any? = value.recompute()
         override fun dependencyInvalidated() {
             val wasValid = getState() == ECacheEntryState.VALID
             value.dependencyInvalidated()

@@ -1,38 +1,54 @@
 package org.modelix.incremental
 
+import kotlin.jvm.Synchronized
+
 class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyListener {
 
     private val graph = DependencyGraph(this)
-    private var activeEvaluation: Evaluation? = null
+    private var activeEvaluations = ArrayList<Evaluation>()
     private val observedOutputs = HashSet<ObservedOutput<*>>()
 
     init {
         DependencyTracking.registerListener(this)
     }
 
+    @Synchronized
     override fun <T> compute(call: IncrementalFunctionCall<T>): T {
         val engineValueKey = EngineValueDependency(this, call)
         DependencyTracking.accessed(engineValueKey)
         return update(engineValueKey)
     }
 
+    @Synchronized
     private fun <T> update(engineValueKey: EngineValueDependency): T {
         val node = graph.getOrAddNode(engineValueKey) as DependencyGraph.ComputedNode
         if (node.getState() == ECacheEntryState.VALID) {
             return node.getValue() as T
         }
+
+        // dependency cycle detection
+        val cycleStart = activeEvaluations.indexOfLast { it.key == engineValueKey }
+        if (cycleStart != -1) {
+//            val defaultValue = engineValueKey.call.getDefaultValue()
+//            if (defaultValue.hasValue()) {
+//                return defaultValue.getValue() as T
+//            } else {
+                throw DependencyCycleException(activeEvaluations.drop(cycleStart).map { it.call })
+//            }
+        }
+
         val evaluation = Evaluation(engineValueKey, engineValueKey.call)
-        val previousEvaluation = activeEvaluation
         try {
-            activeEvaluation = evaluation
-            val value: T = node.recompute() as T
+            activeEvaluations += evaluation
+            val value: T = node.validate() as T
             graph.setDependencies(engineValueKey, evaluation.dependencies)
             return value
         } finally {
-            activeEvaluation = previousEvaluation
+            activeEvaluations.removeLast()
         }
     }
 
+    @Synchronized
     override fun <T> activate(call: IncrementalFunctionCall<T>): IActiveOutput<T> {
         val output = ObservedOutput<T>(EngineValueDependency(this, call))
         observedOutputs += output
@@ -41,7 +57,7 @@ class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyListene
     }
 
     override fun accessed(key: IDependencyKey) {
-        val evaluation = activeEvaluation ?: return
+        val evaluation = activeEvaluations.lastOrNull() ?: return
         evaluation.dependencies += key
     }
 

@@ -1,9 +1,6 @@
 package org.modelix.incremental
 
-import kotlin.test.AfterTest
-import kotlin.test.BeforeTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
+import kotlin.test.*
 
 class IncrementalMathTest {
     lateinit var engine: IncrementalEngine
@@ -22,7 +19,7 @@ class IncrementalMathTest {
     fun simpleCachingTest() {
         val values = (1..10).map { TrackableValue(it) }
         var numInvocations = 0
-        val sum = engine.incrementalFunction<Int> { context ->
+        val sum = engine.incrementalFunction<Int>("sum") { context ->
             println("compute sum")
             numInvocations++
             values.fold(0) { acc, value -> acc + value.getValue() }
@@ -38,13 +35,13 @@ class IncrementalMathTest {
     fun transitiveDependencies() {
         val a = TrackableValue(10)
         val b = TrackableValue(5)
-        val c = engine.incrementalFunction<Int> {
+        val c = engine.incrementalFunction<Int>("c") {
             a.getValue() + b.getValue()
         }
-        val d = engine.incrementalFunction<Int> {
+        val d = engine.incrementalFunction<Int>("d") {
             a.getValue() - b.getValue()
         }
-        val e = engine.incrementalFunction<Int> {
+        val e = engine.incrementalFunction<Int>("e") {
             c() * d()
         }
 
@@ -61,9 +58,9 @@ class IncrementalMathTest {
     fun sideEffects() {
         val input = (1..3).map { TrackableValue(it) }
         val states = Array<Int>(3) { 0 }
-        val f: IncrementalFunctionCall<Unit> = IncrementalFunctionCall0 {
+        val f: IncrementalFunctionCall<Unit> = IncrementalFunctionCall0(IncrementalFunctionImplementation0("f") {
             states.indices.forEach { states[it] = input[it].getValue() }
-        }
+        })
         assertEquals(listOf(0, 0, 0), states.asList())
 
         val activeOutput = engine.activate(f)
@@ -83,5 +80,16 @@ class IncrementalMathTest {
         engine.flush()
         assertEquals(listOf(10, 2, 30), states.asList())
 
+    }
+
+    @Test
+    fun cycle() {
+        val a = TrackableValue(5)
+        var b: (()->Int)? = null
+        val c = engine.incrementalFunction<Int>("c") { b!!() / 2 }
+        b = engine.incrementalFunction<Int>("b") { a.getValue() + c() }
+
+        assertFailsWith(DependencyCycleException::class) { c() }
+        assertFailsWith(DependencyCycleException::class) { b() }
     }
 }

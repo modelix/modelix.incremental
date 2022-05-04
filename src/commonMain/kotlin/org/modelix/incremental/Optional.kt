@@ -6,17 +6,18 @@ abstract class Optional<E> {
     fun getOrElse(defaultValue: ()->E): E = if (hasValue()) getValue() else defaultValue()
     fun getOrNull(): E? = if (hasValue()) getValue() else null
     companion object {
-        fun <T> empty() = EmptyOptional<T>()
-        fun <T> of(value: T) = OptionalWithValue(value)
+        private val EMPTY = EmptyOptional<Any?>()
+        fun <T> empty(): Optional<T> = EMPTY as Optional<T>
+        fun <T> of(value: T): Optional<T> = OptionalWithValue(value)
     }
 }
 
-class EmptyOptional<E> : Optional<E>() {
+private class EmptyOptional<E> : Optional<E>() {
     override fun hasValue(): Boolean = false
     override fun getValue(): E = throw RuntimeException("Optional has no value")
 }
 
-class OptionalWithValue<E>(private val value: E) : Optional<E>() {
+private data class OptionalWithValue<E>(private val value: E) : Optional<E>() {
     override fun hasValue(): Boolean = true
     override fun getValue(): E = value
 }
