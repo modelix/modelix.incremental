@@ -9,7 +9,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
     fun getNode(key: IDependencyKey): Node? = nodes[key]
 
     fun getOrAddNode(key: IDependencyKey): Node = nodes.getOrPut(key) {
-        if (key is EngineValueDependency && key.engine == engine) ComputedNode(key) else InputNode(key)
+        if (key is EngineValueDependency<*> && key.engine == engine) ComputedNode(key) else InputNode(key)
     }
 
     fun getDependencies(from: IDependencyKey): Set<IDependencyKey> {
@@ -103,7 +103,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
     }
 
-    inner class ComputedNode(key: EngineValueDependency) : Node(key) {
+    inner class ComputedNode(key: EngineValueDependency<*>) : Node(key) {
         private val value: CacheEntry<*> = CacheEntry(key.call)
         fun getState(): ECacheEntryState = value.getState()
         fun getValue(): Any? = value.getValue()

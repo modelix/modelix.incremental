@@ -20,7 +20,7 @@ class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyListene
     }
 
     @Synchronized
-    private fun <T> update(engineValueKey: EngineValueDependency): T {
+    private fun <T> update(engineValueKey: EngineValueDependency<T>): T {
         val node = graph.getOrAddNode(engineValueKey) as DependencyGraph.ComputedNode
         if (node.getState() == ECacheEntryState.VALID) {
             return node.getValue() as T
@@ -76,15 +76,15 @@ class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyListene
 
     override fun flush() {
         for (observedOutput in observedOutputs) {
-            update<Any?>(observedOutput.key)
+            update(observedOutput.key)
         }
     }
 
-    private inner class Evaluation(val key: EngineValueDependency, val call: IncrementalFunctionCall<*>) {
+    private inner class Evaluation(val key: EngineValueDependency<*>, val call: IncrementalFunctionCall<*>) {
         val dependencies: MutableSet<IDependencyKey> = HashSet()
     }
 
-    private inner class ObservedOutput<E>(val key: EngineValueDependency) : IActiveOutput<E> {
+    private inner class ObservedOutput<E>(val key: EngineValueDependency<E>) : IActiveOutput<E> {
         override fun deactivate() {
             observedOutputs -= this
         }
