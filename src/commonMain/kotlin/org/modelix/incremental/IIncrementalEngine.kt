@@ -1,12 +1,10 @@
 package org.modelix.incremental
 
-typealias ComputationKey = Any
-
 interface IIncrementalEngine {
     /**
      * Returns the cached value or computes it synchronously
      */
-    fun <T> compute(call: IncrementalFunctionCall<T>): T
+    suspend fun <T> compute(call: IncrementalFunctionCall<T>): T
 
     /**
      * Computes multiple values in parallel

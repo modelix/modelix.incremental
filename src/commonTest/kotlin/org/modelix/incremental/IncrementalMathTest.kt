@@ -5,15 +5,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlin.test.*
 import kotlinx.coroutines.test.runTest
-
-expect val coroutineScope: CoroutineScope
+import kotlin.math.sqrt
 
 class IncrementalMathTest {
     lateinit var engine: IncrementalEngine
 
     @BeforeTest
     fun before() {
-        engine = IncrementalEngine(coroutineScope)
+        engine = IncrementalEngine()
     }
 
     @AfterTest
@@ -22,7 +21,7 @@ class IncrementalMathTest {
     }
 
     @Test
-    fun simpleCachingTest() {
+    fun simpleCachingTest() = runTest {
         val values = (1..10).map { TrackableValue(it) }
         var numInvocations = 0
         val sum = engine.incrementalFunction<Int>("sum") { context ->
@@ -38,7 +37,7 @@ class IncrementalMathTest {
     }
 
     @Test
-    fun transitiveDependencies() {
+    fun transitiveDependencies() = runTest {
         val a = TrackableValue(10)
         val b = TrackableValue(5)
         val c = engine.incrementalFunction<Int>("c") {
@@ -61,7 +60,7 @@ class IncrementalMathTest {
     }
 
     @Test
-    fun sideEffects() {
+    fun sideEffects() = runTest {
         val input = (1..3).map { TrackableValue(it) }
         val states = Array<Int>(3) { 0 }
         val f: IncrementalFunctionCall<Unit> = IncrementalFunctionCall0(IncrementalFunctionImplementation0("f") {
@@ -89,9 +88,9 @@ class IncrementalMathTest {
     }
 
     @Test
-    fun cycleDetection() {
+    fun cycleDetection() = runTest {
         val a = TrackableValue(5)
-        var b: (()->Int)? = null
+        var b: (suspend ()->Int)? = null
         val c = engine.incrementalFunction<Int>("c") { b!!() / 2 }
         b = engine.incrementalFunction<Int>("b") { a.getValue() + c() }
 
@@ -101,14 +100,21 @@ class IncrementalMathTest {
 
     @Test
     fun parallelComputation() = runTest {
-        val a = TrackableValue(5)
-        val f = engine.incrementalFunctionP<Int, Int>("f") { _, b ->
-            a.getValue() + b
+        val factors: (Int) -> IncrementalFunctionCall1<List<Int>, Int> = engine.incrementalFunctionP<List<Int>, Int>("factors") { _, n ->
+            (2 .. n / 2).filter { p -> n % p == 0 }
+        }
+        var primeFactors: ((Int) -> IncrementalFunctionCall1<List<Int>, Int>)? = null
+        primeFactors = engine.incrementalFunctionP<List<Int>, Int>("f") { _, n ->
+            if (n < 2) emptyList() else ((2 .. n / 2).filter { p -> n % p == 0 }).filter { engine.compute(primeFactors!!(it)).isEmpty() }
         }
 
-        val b = 1..1000
-        val sum = engine.computeAll(b.map { f(it) }).sum()
-        assertEquals(505500, sum)
+        val b: IntRange = 2..1000
+        val allFactors = engine.computeAll(b.map { primeFactors(it) }).flatten().distinct().sorted()
+        assertEquals(listOf(2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89,
+            97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 193, 197, 199,
+            211, 223, 227, 229, 233, 239, 241, 251, 257, 263, 269, 271, 277, 281, 283, 293, 307, 311, 313, 317, 331,
+            337, 347, 349, 353, 359, 367, 373, 379, 383, 389, 397, 401, 409, 419, 421, 431, 433, 439, 443, 449, 457,
+            461, 463, 467, 479, 487, 491, 499), allFactors)
         //val avg = engine.incrementalFunction<Int>("avg") { _ -> engine.computeAll(b.map { f(it) }).sum() / b.count() }
 
         //assertEquals(505, avg())

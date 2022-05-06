@@ -3,7 +3,7 @@ package org.modelix.incremental
 class TrackableValue<E>(initialValue: E) : IDependencyKey, IValueAccessor<E> {
     private var value: E = initialValue
 
-    override fun getValue(): E {
+    override suspend fun getValue(): E {
         DependencyTracking.accessed(this)
         return value
     }

@@ -1,5 +1,11 @@
 package org.modelix.incremental
 
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.internal.synchronized
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlin.jvm.Synchronized
+
 /**
  * Not thread-safe.
  */
@@ -24,6 +30,10 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
     fun setDependencies(from: IDependencyKey, to: Set<IDependencyKey>) {
         val fromNode = getOrAddNode(from)
+        setDependencies(fromNode, to)
+    }
+
+    fun setDependencies(fromNode: Node, to: Set<IDependencyKey>) {
         val current = fromNode.getDependencies().asSequence().map { it.key }.toSet()
         val addedDeps: Set<IDependencyKey> = to - current
         val removedDeps: Set<IDependencyKey> = current - to
@@ -47,7 +57,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
     fun contains(key: IDependencyKey) = nodes.containsKey(key)
 
-    open inner class Node(val key: IDependencyKey) {
+    open inner class Node(open val key: IDependencyKey) {
         private val reverseDependencies: MutableSet<Node> = HashSet()
         private val dependencies: MutableSet<Node> = HashSet()
 
@@ -103,14 +113,31 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
     }
 
-    inner class ComputedNode(key: EngineValueDependency<*>) : Node(key) {
-        private val value: CacheEntry<*> = CacheEntry(key.call)
-        fun getState(): ECacheEntryState = value.getState()
-        fun getValue(): Any? = value.getValue()
-        fun validate(): Any? = value.recompute()
+    inner class ComputedNode(override val key: EngineValueDependency<*>) : Node(key) {
+        private var value: Any? = null
+        private var state: ECacheEntryState = ECacheEntryState.NEW
+        var activeValidation: Deferred<Any?>? = null
+        fun getState(): ECacheEntryState = state
+        fun getValue(): Any? = value
+        fun startValidation() {
+            require(state != ECacheEntryState.VALIDATING) { "There is already an active validation for $key" }
+            state = ECacheEntryState.VALIDATING
+        }
+        fun finishValidation(newValue: Any?, newDependencies: Set<IDependencyKey>) {
+            require(state == ECacheEntryState.VALIDATING) { "There is no active validation for $key" }
+            value = newValue
+            setDependencies(this, newDependencies)
+            state = ECacheEntryState.VALID
+        }
+        fun validationFailed(exception: Throwable, newDependencies: Set<IDependencyKey>) {
+            require(state == ECacheEntryState.VALIDATING) { "There is no active validation for $key" }
+            value = exception
+            setDependencies(this, newDependencies)
+            state = ECacheEntryState.FAILED
+        }
         override fun dependencyInvalidated() {
             val wasValid = getState() == ECacheEntryState.VALID
-            value.dependencyInvalidated()
+            state = ECacheEntryState.DEPENDENCY_INVALID
             if (wasValid) {
                 super.dependencyInvalidated()
             }
@@ -118,7 +145,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
         override fun invalidate() {
             val wasValid = getState() == ECacheEntryState.VALID
-            value.invalidate()
+            state = ECacheEntryState.INVALID
             if (wasValid) {
                 super.invalidate()
             }

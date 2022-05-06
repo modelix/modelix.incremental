@@ -1,7 +1,5 @@
 package org.modelix.incremental
 
-import kotlinx.coroutines.CoroutineScope
-
-expect class IncrementalEngine(coroutineScope: CoroutineScope) : IIncrementalEngine {
+expect class IncrementalEngine() : IIncrementalEngine {
     fun dispose()
 }
