@@ -7,7 +7,7 @@ import kotlin.coroutines.CoroutineContext
 actual class IncrementalEngine actual constructor() : IIncrementalEngine, IDependencyKey, IDependencyListener {
 
     private val graph = DependencyGraph(this)
-    private val graphDispatcher = newSingleThreadContext("DependencyGraph")
+    private val graphDispatcher = Dispatchers.Default.limitedParallelism(1)
     private val observedOutputs = HashSet<ObservedOutput<*>>()
     private val activeEvaluation: ThreadLocal<Evaluation?> = ThreadLocal()
 
@@ -15,7 +15,6 @@ actual class IncrementalEngine actual constructor() : IIncrementalEngine, IDepen
         DependencyTracking.registerListener(this)
     }
 
-    //@Synchronized
     override suspend fun <T> compute(call: IncrementalFunctionCall<T>): T {
         val engineValueKey = EngineValueDependency(this, call)
         DependencyTracking.accessed(engineValueKey)
