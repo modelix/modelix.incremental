@@ -3,7 +3,6 @@ package org.modelix.incremental
 import kotlinx.coroutines.*
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
-import kotlin.jvm.Synchronized
 
 actual class IncrementalEngine actual constructor() : IIncrementalEngine, IDependencyKey, IDependencyListener {
 
@@ -34,7 +33,6 @@ actual class IncrementalEngine actual constructor() : IIncrementalEngine, IDepen
         }
     }
 
-    //@Synchronized
     private suspend fun <T> update(engineValueKey: EngineValueDependency<T>): T {
         return withContext(graphDispatcher) {
             val node: DependencyGraph.ComputedNode = graph.getOrAddNode(engineValueKey) as DependencyGraph.ComputedNode
@@ -67,11 +65,12 @@ actual class IncrementalEngine actual constructor() : IIncrementalEngine, IDepen
         }
     }
 
-    @Synchronized
     override fun <T> activate(call: IncrementalFunctionCall<T>): IActiveOutput<T> {
         val output = ObservedOutput<T>(EngineValueDependency(this, call))
-        observedOutputs += output
         runBlocking {
+            withContext(graphDispatcher) {
+                observedOutputs += output
+            }
             launch {
                 compute(call)
             }
@@ -103,8 +102,10 @@ actual class IncrementalEngine actual constructor() : IIncrementalEngine, IDepen
 
     override fun flush() {
         runBlocking {
-            for (observedOutput in observedOutputs) {
-                update(observedOutput.key)
+            withContext(graphDispatcher) {
+                for (observedOutput in observedOutputs) {
+                    update(observedOutput.key)
+                }
             }
         }
     }
