@@ -1,10 +1,6 @@
 package org.modelix.incremental
 
 import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.internal.synchronized
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import kotlin.jvm.Synchronized
 
 /**
  * Not thread-safe.
@@ -123,7 +119,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             require(state != ECacheEntryState.VALIDATING) { "There is already an active validation for $key" }
             state = ECacheEntryState.VALIDATING
         }
-        fun finishValidation(newValue: Any?, newDependencies: Set<IDependencyKey>) {
+        fun validationSuccessful(newValue: Any?, newDependencies: Set<IDependencyKey>) {
             require(state == ECacheEntryState.VALIDATING) { "There is no active validation for $key" }
             value = newValue
             setDependencies(this, newDependencies)

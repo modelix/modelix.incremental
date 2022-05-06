@@ -53,7 +53,7 @@ actual class IncrementalEngine actual constructor() : IIncrementalEngine, IDepen
                     node.activeValidation = asyncValue
                     try {
                         val value = asyncValue.await()
-                        node.finishValidation(value, evaluation.dependencies)
+                        node.validationSuccessful(value, evaluation.dependencies)
                         value
                     } catch (e: Throwable) {
                         node.validationFailed(e, evaluation.dependencies)
