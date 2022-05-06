@@ -3,7 +3,6 @@ package org.modelix.incremental
 import kotlinx.coroutines.*
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
-import kotlin.coroutines.coroutineContext
 import kotlin.jvm.Synchronized
 
 actual class IncrementalEngine actual constructor() : IIncrementalEngine, IDependencyKey, IDependencyListener {
@@ -44,37 +43,28 @@ actual class IncrementalEngine actual constructor() : IIncrementalEngine, IDepen
                 ECacheEntryState.FAILED -> throw node.getValue() as Throwable
             }
 
-            var asyncValue: Deferred<Any?>? = if (node.getState() == ECacheEntryState.VALIDATING) node.activeValidation else null
-            if (asyncValue == null) {
-                val evaluation = Evaluation(engineValueKey, engineValueKey.call, kotlin.coroutines.coroutineContext[Evaluation])
-                node.startValidation()
-                asyncValue = async(Dispatchers.Default + activeEvaluation.asContextElement(evaluation)) {
-                    engineValueKey.call.invoke(IncrementalFunctionContext<T>(node)) as T
+            val evaluation = Evaluation(engineValueKey, engineValueKey.call, kotlin.coroutines.coroutineContext[Evaluation])
+            evaluation.detectCycle()
+            withContext(evaluation) {
+                var asyncValue: Deferred<Any?>? = if (node.getState() == ECacheEntryState.VALIDATING) node.activeValidation else null
+                if (asyncValue == null) {
+                    node.startValidation()
+                    asyncValue = async(Dispatchers.Default + activeEvaluation.asContextElement(evaluation)) {
+                        engineValueKey.call.invoke(IncrementalFunctionContext<T>(node)) as T
+                    }
+                    node.activeValidation = asyncValue
+                    try {
+                        val value = asyncValue.await()
+                        node.finishValidation(value, evaluation.dependencies)
+                        value
+                    } catch (e: Throwable) {
+                        node.validationFailed(e, evaluation.dependencies)
+                        throw e
+                    }
                 }
-                node.activeValidation = asyncValue
-                try {
-                    val value = asyncValue.await()
-                    node.finishValidation(value, evaluation.dependencies)
-                    value
-                } catch (e: Throwable) {
-                    node.validationFailed(e, evaluation.dependencies)
-                    throw e
-                }
+                asyncValue.await() as T
             }
-            asyncValue.await() as T
         }
-
-        // dependency cycle detection
-//        val cycleStart = activeEvaluations.indexOfLast { it.key == engineValueKey }
-//        if (cycleStart != -1) {
-//            val defaultValue = engineValueKey.call.getDefaultValue()
-//            if (defaultValue.hasValue()) {
-//                return defaultValue.getValue() as T
-//            } else {
-//                throw DependencyCycleException(activeEvaluations.drop(cycleStart).map { it.call })
-//            }
-//        }
-
     }
 
     @Synchronized
@@ -142,6 +132,24 @@ actual class IncrementalEngine actual constructor() : IIncrementalEngine, IDepen
         companion object Key : CoroutineContext.Key<Evaluation>
 
         val dependencies: MutableSet<IDependencyKey> = HashSet()
+
+        fun getEvaluations(): List<Evaluation> {
+            return (previous?.getEvaluations() ?: emptyList()) + this
+        }
+
+        fun detectCycle() {
+            var current = previous
+            while (current != null) {
+                if (current.dependencyKey == dependencyKey) {
+                    val activeEvaluations = previous!!.getEvaluations()
+                    val cycleStart = activeEvaluations.indexOfLast { it.dependencyKey == dependencyKey }
+                    if (cycleStart != -1) {
+                        throw DependencyCycleException(activeEvaluations.drop(cycleStart).map { it.call })
+                    }
+                }
+                current = current.previous
+            }
+        }
     }
 
     private inner class ObservedOutput<E>(val key: EngineValueDependency<E>) : IActiveOutput<E> {

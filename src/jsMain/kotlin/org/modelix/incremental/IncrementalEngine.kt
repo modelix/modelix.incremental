@@ -2,8 +2,8 @@ package org.modelix.incremental
 
 import kotlinx.coroutines.CoroutineScope
 
-actual class IncrementalEngine actual constructor(coroutineScope: CoroutineScope) : IIncrementalEngine {
-    override fun <T> compute(call: IncrementalFunctionCall<T>): T {
+actual class IncrementalEngine actual constructor() : IIncrementalEngine {
+    override suspend fun <T> compute(call: IncrementalFunctionCall<T>): T {
         TODO("Not yet implemented")
     }
 
