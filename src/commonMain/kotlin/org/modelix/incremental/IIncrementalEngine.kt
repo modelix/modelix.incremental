@@ -9,6 +9,11 @@ interface IIncrementalEngine {
     fun <T> compute(call: IncrementalFunctionCall<T>): T
 
     /**
+     * Computes multiple values in parallel
+     */
+    suspend fun <T> computeAll(calls: List<IncrementalFunctionCall<T>>): List<T>
+
+    /**
      * Automatically re-executes the function whenever the inputs change.
      * The function usually produces some side effect and is not expected to have any return value.
      */

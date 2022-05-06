@@ -152,6 +152,10 @@ fun <RetT, P1> IIncrementalEngine.incrementalFunction(name: String, body: (IIncr
     val impl = IncrementalFunctionImplementation1(name, body)
     return { p1 -> this.compute(IncrementalFunctionCall1(impl, p1)) }
 }
+fun <RetT, P1> IIncrementalEngine.incrementalFunctionP(name: String, body: (IIncrementalFunctionContext<RetT>, P1)->RetT): (P1) -> IncrementalFunctionCall1<RetT, P1> {
+    val impl = IncrementalFunctionImplementation1(name, body)
+    return { p1 -> IncrementalFunctionCall1(impl, p1) }
+}
 
 fun <RetT, P1, P2> IIncrementalEngine.incrementalFunction(name: String, body: (IIncrementalFunctionContext<RetT>, P1, P2)->RetT): (P1, P2) -> RetT {
     val impl = IncrementalFunctionImplementation2(name, body)

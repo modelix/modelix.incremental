@@ -1,13 +1,19 @@
 package org.modelix.incremental
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
 import kotlin.test.*
+import kotlinx.coroutines.test.runTest
+
+expect val coroutineScope: CoroutineScope
 
 class IncrementalMathTest {
     lateinit var engine: IncrementalEngine
 
     @BeforeTest
     fun before() {
-        engine = IncrementalEngine()
+        engine = IncrementalEngine(coroutineScope)
     }
 
     @AfterTest
@@ -91,5 +97,20 @@ class IncrementalMathTest {
 
         assertFailsWith(DependencyCycleException::class) { c() }
         assertFailsWith(DependencyCycleException::class) { b() }
+    }
+
+    @Test
+    fun parallelComputation() = runTest {
+        val a = TrackableValue(5)
+        val f = engine.incrementalFunctionP<Int, Int>("f") { _, b ->
+            a.getValue() + b
+        }
+
+        val b = 1..1000
+        val sum = engine.computeAll(b.map { f(it) }).sum()
+        assertEquals(505500, sum)
+        //val avg = engine.incrementalFunction<Int>("avg") { _ -> engine.computeAll(b.map { f(it) }).sum() / b.count() }
+
+        //assertEquals(505, avg())
     }
 }
