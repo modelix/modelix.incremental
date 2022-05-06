@@ -22,7 +22,7 @@ class ReactiveSandboxTest {
                 }
             }
         }
-        val function: (MNode) -> ObservableSource<out MNode> = { it.children.toObservable() }
+        val function: (MNode) -> ObservableSource<out MNode> = { it.getAllChildren().toObservable() }
         Observable.just(rootNode).flatMap(function)
         listOf(2, 1, 0, -1).toObservable().flatMap { Observable.just(10 / it) }.doOnError { println("Error: $it") }.subscribeBy(
             onNext = { println(it) },

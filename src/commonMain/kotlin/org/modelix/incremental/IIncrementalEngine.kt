@@ -15,10 +15,10 @@ interface IIncrementalEngine {
      * Automatically re-executes the function whenever the inputs change.
      * The function usually produces some side effect and is not expected to have any return value.
      */
-    fun <T> activate(call: IncrementalFunctionCall<T>): IActiveOutput<T>
+    suspend fun <T> activate(call: IncrementalFunctionCall<T>): IActiveOutput<T>
 
     /**
      * Blocks until all pending functions are recomputed.
      */
-    fun flush()
+    suspend fun flush()
 }

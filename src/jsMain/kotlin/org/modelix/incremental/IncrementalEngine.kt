@@ -11,11 +11,11 @@ actual class IncrementalEngine actual constructor() : IIncrementalEngine {
         TODO("Not yet implemented")
     }
 
-    override fun <T> activate(call: IncrementalFunctionCall<T>): IActiveOutput<T> {
+    override suspend fun <T> activate(call: IncrementalFunctionCall<T>): IActiveOutput<T> {
         TODO("Not yet implemented")
     }
 
-    override fun flush() {
+    override suspend fun flush() {
         TODO("Not yet implemented")
     }
 

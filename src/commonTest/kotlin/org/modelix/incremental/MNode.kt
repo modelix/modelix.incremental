@@ -1,17 +1,22 @@
 package org.modelix.incremental
 
-class MNode(val type: String, var role: String? = null) {
-    val children: MutableList<MNode> = ArrayList()
-    val properties: MutableMap<String, String> = HashMap()
-    val references: MutableMap<String, MNode> = HashMap()
+class MNode(val type: String, var role: String? = null) : IDependencyKey {
+    private val parent: MNode? = null
+    private val children: MutableList<MNode> = ArrayList()
+    private val properties: MutableMap<String, String> = HashMap()
+    private val references: MutableMap<String, MNode> = HashMap()
 
     fun getChildren(role: String): List<MNode> {
+        DependencyTracking.accessed(RoleDependency(this, role))
         return children.filter { it.role == role }
     }
+
+    fun getAllChildren(): List<MNode> = children
 
     fun child(type: String, role: String, initializer: MNode.()->Unit): MNode {
         val child = MNode(type, role)
         children += child
+        DependencyTracking.modified(RoleDependency(this, role))
         initializer(child)
         return child
     }
@@ -22,7 +27,19 @@ class MNode(val type: String, var role: String? = null) {
         } else {
             properties[name] = value
         }
+        DependencyTracking.modified(RoleDependency(this, name))
     }
 
-    fun getProperty(role: String): String? = properties[role]
+    fun getProperty(role: String): String? {
+        DependencyTracking.accessed(RoleDependency(this, role))
+        return properties[role]
+    }
+
+    override fun getGroup(): IDependencyKey? {
+        return parent
+    }
+}
+
+data class RoleDependency(val node: MNode, val role: String) : IDependencyKey {
+    override fun getGroup() = node
 }

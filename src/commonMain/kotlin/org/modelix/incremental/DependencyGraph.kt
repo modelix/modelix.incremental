@@ -1,11 +1,13 @@
 package org.modelix.incremental
 
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.channels.Channel
 
 /**
  * Not thread-safe.
  */
 class DependencyGraph(val engine: IncrementalEngine) {
+    val autoValidationChannel: Channel<EngineValueDependency<*>> = Channel(capacity = Channel.UNLIMITED)
     private val nodes: MutableMap<IDependencyKey, Node> = HashMap()
 
     fun getNode(key: IDependencyKey): Node? = nodes[key]
@@ -113,6 +115,11 @@ class DependencyGraph(val engine: IncrementalEngine) {
         private var value: Any? = null
         private var state: ECacheEntryState = ECacheEntryState.NEW
         var activeValidation: Deferred<Any?>? = null
+
+        /**
+         * if true, the engine will validate it directly after it got invalidated, without any external trigger
+         */
+        var autoValidate: Boolean = false
         fun getState(): ECacheEntryState = state
         fun getValue(): Any? = value
         fun startValidation() {
@@ -136,6 +143,8 @@ class DependencyGraph(val engine: IncrementalEngine) {
             state = ECacheEntryState.DEPENDENCY_INVALID
             if (wasValid) {
                 super.dependencyInvalidated()
+                DependencyTracking.modified(key)
+                if (autoValidate) autoValidationChannel.trySend(key)
             }
         }
 
@@ -144,6 +153,8 @@ class DependencyGraph(val engine: IncrementalEngine) {
             state = ECacheEntryState.INVALID
             if (wasValid) {
                 super.invalidate()
+                DependencyTracking.modified(key)
+                if (autoValidate) autoValidationChannel.trySend(key)
             }
         }
     }
