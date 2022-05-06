@@ -7,7 +7,8 @@ import kotlin.coroutines.CoroutineContext
 actual class IncrementalEngine actual constructor() : IIncrementalEngine, IDependencyKey, IDependencyListener {
 
     private val graph = DependencyGraph(this)
-    private val graphDispatcher = Dispatchers.Default.limitedParallelism(1)
+    private val dispatcher = Dispatchers.Default
+    private val graphDispatcher = dispatcher.limitedParallelism(1)
     private val observedOutputs = HashSet<ObservedOutput<*>>()
     private val activeEvaluation: ThreadLocal<Evaluation?> = ThreadLocal()
 
@@ -25,7 +26,7 @@ actual class IncrementalEngine actual constructor() : IIncrementalEngine, IDepen
         val keys = calls.map { EngineValueDependency(this, it) }
         keys.forEach { DependencyTracking.accessed(it) }
         return coroutineScope {
-            val futures: List<Deferred<T>> = withContext(Dispatchers.Default) {
+            val futures: List<Deferred<T>> = withContext(dispatcher) {
                 keys.map { key -> async { update(key) } }
             }
             futures.map { it.await() }
@@ -46,7 +47,7 @@ actual class IncrementalEngine actual constructor() : IIncrementalEngine, IDepen
                 var asyncValue: Deferred<Any?>? = if (node.getState() == ECacheEntryState.VALIDATING) node.activeValidation else null
                 if (asyncValue == null) {
                     node.startValidation()
-                    asyncValue = async(Dispatchers.Default + activeEvaluation.asContextElement(evaluation)) {
+                    asyncValue = async(dispatcher + activeEvaluation.asContextElement(evaluation)) {
                         engineValueKey.call.invoke(IncrementalFunctionContext<T>(node)) as T
                     }
                     node.activeValidation = asyncValue
