@@ -1,11 +1,7 @@
 package org.modelix.incremental
 
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlin.test.*
 import kotlinx.coroutines.test.runTest
-import kotlin.math.sqrt
 
 class IncrementalMathTest {
     lateinit var engine: IncrementalEngine
@@ -100,11 +96,11 @@ class IncrementalMathTest {
 
     @Test
     fun parallelComputation() = runTest {
-        val factors: (Int) -> IncrementalFunctionCall1<List<Int>, Int> = engine.incrementalFunctionP<List<Int>, Int>("factors") { _, n ->
+        val factors: (Int) -> IncrementalFunctionCall1<List<Int>, Int> = incrementalFunction<List<Int>, Int>("factors") { _, n ->
             (2 .. n / 2).filter { p -> n % p == 0 }
         }
         var primeFactors: ((Int) -> IncrementalFunctionCall1<List<Int>, Int>)? = null
-        primeFactors = engine.incrementalFunctionP<List<Int>, Int>("f") { _, n ->
+        primeFactors = incrementalFunction<List<Int>, Int>("f") { _, n ->
             if (n < 2) emptyList() else ((2 .. n / 2).filter { p -> n % p == 0 }).filter { engine.compute(primeFactors!!(it)).isEmpty() }
         }
 
@@ -115,8 +111,5 @@ class IncrementalMathTest {
             211, 223, 227, 229, 233, 239, 241, 251, 257, 263, 269, 271, 277, 281, 283, 293, 307, 311, 313, 317, 331,
             337, 347, 349, 353, 359, 367, 373, 379, 383, 389, 397, 401, 409, 419, 421, 431, 433, 439, 443, 449, 457,
             461, 463, 467, 479, 487, 491, 499), allFactors)
-        //val avg = engine.incrementalFunction<Int>("avg") { _ -> engine.computeAll(b.map { f(it) }).sum() / b.count() }
-
-        //assertEquals(505, avg())
     }
 }

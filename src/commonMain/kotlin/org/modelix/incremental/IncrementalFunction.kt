@@ -63,6 +63,7 @@ abstract class IncrementalFunctionCall<RetT>() {
      * Shouldn't be invoked directly. Use IIncrementalEngine.compute(...) instead.
      */
     abstract suspend fun invoke(context: IIncrementalFunctionContext<RetT>): RetT
+    fun bind(engine: IIncrementalEngine): suspend () -> RetT = { engine.compute(this) }
 }
 data class IncrementalFunctionCall0<RetT>(
     val function: IncrementalFunctionImplementation0<RetT>,
@@ -176,4 +177,33 @@ fun <RetT, P1, P2, P3, P4, P5> IIncrementalEngine.incrementalFunction(name: Stri
 fun <RetT, P1, P2, P3, P4, P5, P6> IIncrementalEngine.incrementalFunction(name: String, body: (IIncrementalFunctionContext<RetT>, P1, P2, P3, P4, P5, P6)->RetT): suspend (P1, P2, P3, P4, P5, P6) -> RetT {
     val impl = IncrementalFunctionImplementation6(name, body)
     return { p1, p2, p3, p4, p5, p6 -> this.compute(IncrementalFunctionCall6(impl, p1, p2, p3, p4, p5, p6)) }
+}
+
+fun <RetT> incrementalFunction(name: String, body: suspend (IIncrementalFunctionContext<RetT>)->RetT): IncrementalFunctionCall0<RetT> {
+    val impl = IncrementalFunctionImplementation0(name, body)
+    return IncrementalFunctionCall0(impl)
+}
+fun <RetT, P1> incrementalFunction(name: String, body: suspend (IIncrementalFunctionContext<RetT>, P1)->RetT): (P1) -> IncrementalFunctionCall1<RetT, P1> {
+    val impl = IncrementalFunctionImplementation1(name, body)
+    return { p1 -> IncrementalFunctionCall1(impl, p1) }
+}
+fun <RetT, P1, P2> incrementalFunction(name: String, body: (IIncrementalFunctionContext<RetT>, P1, P2)->RetT): (P1, P2) -> IncrementalFunctionCall2<RetT, P1, P2> {
+    val impl = IncrementalFunctionImplementation2(name, body)
+    return { p1, p2 -> IncrementalFunctionCall2(impl, p1, p2) }
+}
+fun <RetT, P1, P2, P3> incrementalFunction(name: String, body: (IIncrementalFunctionContext<RetT>, P1, P2, P3)->RetT): (P1, P2, P3) -> IncrementalFunctionCall3<RetT, P1, P2, P3> {
+    val impl = IncrementalFunctionImplementation3(name, body)
+    return { p1, p2, p3 -> IncrementalFunctionCall3(impl, p1, p2, p3) }
+}
+fun <RetT, P1, P2, P3, P4> incrementalFunction(name: String, body: (IIncrementalFunctionContext<RetT>, P1, P2, P3, P4)->RetT): (P1, P2, P3, P4) -> IncrementalFunctionCall4<RetT, P1, P2, P3, P4> {
+    val impl = IncrementalFunctionImplementation4(name, body)
+    return { p1, p2, p3, p4 -> IncrementalFunctionCall4(impl, p1, p2, p3, p4) }
+}
+fun <RetT, P1, P2, P3, P4, P5> incrementalFunction(name: String, body: (IIncrementalFunctionContext<RetT>, P1, P2, P3, P4, P5)->RetT): (P1, P2, P3, P4, P5) -> IncrementalFunctionCall5<RetT, P1, P2, P3, P4, P5> {
+    val impl = IncrementalFunctionImplementation5(name, body)
+    return { p1, p2, p3, p4, p5 -> IncrementalFunctionCall5(impl, p1, p2, p3, p4, p5) }
+}
+fun <RetT, P1, P2, P3, P4, P5, P6> incrementalFunction(name: String, body: (IIncrementalFunctionContext<RetT>, P1, P2, P3, P4, P5, P6)->RetT): (P1, P2, P3, P4, P5, P6) -> IncrementalFunctionCall6<RetT, P1, P2, P3, P4, P5, P6> {
+    val impl = IncrementalFunctionImplementation6(name, body)
+    return { p1, p2, p3, p4, p5, p6 -> IncrementalFunctionCall6(impl, p1, p2, p3, p4, p5, p6) }
 }
