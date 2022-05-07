@@ -165,6 +165,25 @@ actual class IncrementalEngine actual constructor() : IIncrementalEngine, IDepen
         }
     }
 
+    override fun <T> compute(call: IncrementalFunctionCall<T>, callback: (T) -> Unit) {
+        engineScope.launch { callback(compute(call)) }
+    }
+
+    override fun <T> computeAll(calls: List<IncrementalFunctionCall<T>>, callback: (List<T>) -> Unit) {
+        engineScope.launch { callback(computeAll(calls)) }
+    }
+
+    override fun <T> activate(call: IncrementalFunctionCall<T>, callback: (IActiveOutput<T>) -> Unit) {
+        engineScope.launch { callback(activate(call)) }
+    }
+
+    override fun flush(callback: () -> Unit) {
+        engineScope.launch {
+            flush()
+            callback()
+        }
+    }
+
     private inner class IncrementalFunctionContext<RetT>(val node: DependencyGraph.ComputedNode) : IIncrementalFunctionContext<RetT> {
         override fun getPreviousResult(): Optional<RetT> {
             val state = node.getState()
