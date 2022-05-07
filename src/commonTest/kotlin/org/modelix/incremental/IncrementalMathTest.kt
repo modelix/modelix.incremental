@@ -167,4 +167,31 @@ class IncrementalMathTest {
             assertEquals(50005000L + 13 + 7 + 23, sum!!(0, input.size() - 1))
         })
     }
+
+    @OptIn(ExperimentalTime::class)
+    @Test
+    fun manyDependencies() = runTest {
+        val input = TrackableList((0L..10000L).toMutableList())
+        val avg: () -> Long = {
+            val sum = (0 until input.size()).asSequence()
+                .map { input.get(it) }
+                .fold(0L) { acc, l -> acc + l }
+            sum / input.size() }
+        val avgi = engine.incrementalFunction<Long>("avg") { _ ->
+            avg()
+        }
+
+        println("Initial: " + measureTime {
+            assertEquals(5000L, avgi())
+        })
+        input.set(10, input.get(10) + 1000000)
+        input.set(1456, input.get(1456) + 3000000)
+        input.set(7654, input.get(7654) + 4000000)
+        println("Incremental: " + measureTime {
+            assertEquals(5799L, avgi())
+        })
+        println("Direct: " + measureTime {
+            assertEquals(5799L, avg())
+        })
+    }
 }
