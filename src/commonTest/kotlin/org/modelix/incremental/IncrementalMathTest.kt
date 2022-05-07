@@ -2,6 +2,8 @@ package org.modelix.incremental
 
 import kotlin.test.*
 import kotlinx.coroutines.test.runTest
+import kotlin.time.ExperimentalTime
+import kotlin.time.measureTime
 
 class IncrementalMathTest {
     lateinit var engine: IncrementalEngine
@@ -104,5 +106,65 @@ class IncrementalMathTest {
         val b: IntRange = 2..10000
         val allFactors = engine.computeAll(b.map { primeFactors(it) }).flatten().distinct().sorted()
         assertEquals(669, allFactors.size)
+    }
+
+    @Test
+    fun singleThread() {
+        var primeFactors: ((Int) -> List<Int>)? = null
+        primeFactors = { n ->
+            if (n < 2) emptyList() else ((2 .. n / 2).filter { p -> n % p == 0 }).filter { primeFactors!!(it).isEmpty() }
+        }
+
+        val b: IntRange = 2..10000
+        val allFactors = b.map { primeFactors(it) }.flatten().distinct().sorted()
+        assertEquals(669, allFactors.size)
+    }
+
+    @Test
+    fun singleThread2() {
+        val b: IntRange = 2..10000
+        val allFactors = b.map { singleThread2_primeFactors(it) }.flatten().distinct().sorted()
+        assertEquals(669, allFactors.size)
+    }
+
+    private val singleThread2_cache = HashMap<Int, List<Int>>()
+    private fun singleThread2_primeFactors(n: Int): List<Int> {
+        val cached = singleThread2_cache[n]
+        if (cached != null) return cached
+        val result = if (n < 2) {
+            emptyList()
+        } else {
+            ((2 .. n / 2).filter { p -> n % p == 0 }).filter { singleThread2_primeFactors(it).isEmpty() }
+        }
+        singleThread2_cache[n] = result
+        return result
+    }
+
+    @OptIn(ExperimentalTime::class)
+    @Test
+    fun incremental() = runTest {
+        val input = TrackableList((0L..10000L).toMutableList())
+
+        var sum: (suspend (Int, Int) -> Long)? = null
+        sum = engine.incrementalFunction<Long, Int, Int>("sum") { _, rangeStart, rangeEnd ->
+            if (rangeStart == rangeEnd) {
+                input.get(rangeStart)
+//            } else if ((rangeEnd - rangeStart) == 1) {
+//                input.get(rangeStart) + input.get(rangeEnd)
+            } else {
+                val mid = (rangeStart + rangeEnd) / 2
+                sum!!(rangeStart, mid) + sum!!(mid + 1, rangeEnd)
+            }
+        }
+
+        println("Initial: " + measureTime {
+            assertEquals(50005000L, sum!!(0, input.size() - 1))
+        })
+        input.set(10, input.get(10) + 13)
+        input.set(1456, input.get(1456) + 7)
+        input.set(7654, input.get(7654) + 23)
+        println("Incremental: " + measureTime {
+            assertEquals(50005000L + 13 + 7 + 23, sum!!(0, input.size() - 1))
+        })
     }
 }

@@ -44,6 +44,7 @@ kotlin {
         val jvmMain by getting {
             dependencies {
                 implementation("io.reactivex.rxjava3:rxkotlin:3.0.1")
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.6.1")
             }
         }
         val jvmTest by getting {
