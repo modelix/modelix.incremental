@@ -71,8 +71,11 @@ benchmark {
     }
     configurations {
         named("main") {
-            warmups = 1
+            warmups = 2
             iterations = 5
+            iterationTime = 1
+            //mode = "avgt"
+            //reportFormat = "text"
             include(".*")
         }
     }

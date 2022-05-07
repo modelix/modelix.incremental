@@ -25,17 +25,19 @@ class EngineBenchmarks {
     }
 
     @Benchmark
-    @OptIn(ExperimentalTime::class)
     fun manyDependencies() = runTest {
-        input.set(10, input.get(10) + 1000000)
-        //input.set(1456, input.get(1456) + 3000000)
-        //input.set(7654, input.get(7654) + 4000000)
+        input.set(10, input.get(10) + 1)
         engine.compute(avgi)
     }
 
+    @Benchmark
+    fun nonIncremental() = runTest {
+        input.set(10, input.get(10) + 1)
+        avg()
+    }
+
     fun avg(): Long {
-        val sum = (0 until input.size()).asSequence()
-            .map { input.get(it) }
+        val sum = input.asSequence()
             .fold(0L) { acc, l -> acc + l }
         return sum / input.size()
     }
