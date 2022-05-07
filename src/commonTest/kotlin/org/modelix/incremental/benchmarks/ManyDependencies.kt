@@ -1,13 +1,13 @@
-package org.modelix.incremental
+package org.modelix.incremental.benchmarks
 
 import kotlinx.benchmark.*
 import kotlinx.coroutines.test.runTest
-import kotlin.test.assertEquals
-import kotlin.time.ExperimentalTime
-import kotlin.time.measureTime
+import org.modelix.incremental.IncrementalEngine
+import org.modelix.incremental.TrackableList
+import org.modelix.incremental.incrementalFunction
 
 @State(Scope.Benchmark)
-class EngineBenchmarks {
+class ManyDependencies {
     lateinit var engine: IncrementalEngine
     val input = TrackableList((0L..10000L).toMutableList())
     val avgi = incrementalFunction<Long>("avg") { _ ->

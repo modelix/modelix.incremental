@@ -71,7 +71,7 @@ benchmark {
     }
     configurations {
         named("main") {
-            warmups = 2
+            warmups = 4
             iterations = 5
             iterationTime = 1
             //mode = "avgt"
