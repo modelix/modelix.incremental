@@ -10,6 +10,7 @@ class TrackableList<E>(val list: MutableList<E>) {
         list[index] = value
         DependencyTracking.modified(ListRangeDependency(this, index, 0))
     }
+    fun asSequence() = (0 until size()).asSequence().map { get(it) }
 }
 
 data class ListRangeDependency(val list: TrackableList<*>, val index: Int, val level: Int): IDependencyKey {

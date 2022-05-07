@@ -145,26 +145,30 @@ class IncrementalMathTest {
     fun incremental() = runTest {
         val input = TrackableList((0L..10000L).toMutableList())
 
-        var sum: (suspend (Int, Int) -> Long)? = null
-        sum = engine.incrementalFunction<Long, Int, Int>("sum") { _, rangeStart, rangeEnd ->
+        var sum: ((Int, Int) -> IncrementalFunctionCall2<Long, Int, Int>)? = null
+        sum = incrementalFunction<Long, Int, Int>("sum") { _, rangeStart, rangeEnd ->
             if (rangeStart == rangeEnd) {
                 input.get(rangeStart)
-//            } else if ((rangeEnd - rangeStart) == 1) {
-//                input.get(rangeStart) + input.get(rangeEnd)
+    //            } else if ((rangeEnd - rangeStart) == 1) {
+    //                input.get(rangeStart) + input.get(rangeEnd)
             } else {
                 val mid = (rangeStart + rangeEnd) / 2
-                sum!!(rangeStart, mid) + sum!!(mid + 1, rangeEnd)
+                val subsums = engine.computeAll(listOf(sum!!(rangeStart, mid), sum!!(mid + 1, rangeEnd)))
+                subsums[0] + subsums[1]
             }
         }
 
         println("Initial: " + measureTime {
-            assertEquals(50005000L, sum!!(0, input.size() - 1))
+            assertEquals(50005000L, engine.compute(sum!!(0, input.size() - 1)))
         })
         input.set(10, input.get(10) + 13)
         input.set(1456, input.get(1456) + 7)
         input.set(7654, input.get(7654) + 23)
         println("Incremental: " + measureTime {
-            assertEquals(50005000L + 13 + 7 + 23, sum!!(0, input.size() - 1))
+            assertEquals(50005000L + 13 + 7 + 23, engine.compute(sum!!(0, input.size() - 1)))
+        })
+        println("Non-incremental: " + measureTime {
+            assertEquals(50005000L + 13 + 7 + 23, input.asSequence().fold(0L) { acc, l -> acc + l })
         })
     }
 
