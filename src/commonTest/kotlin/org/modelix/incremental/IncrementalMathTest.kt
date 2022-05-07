@@ -89,8 +89,12 @@ class IncrementalMathTest {
     fun cycleDetection() = runTest {
         val a = TrackableValue(5)
         var b: (suspend ()->Int)? = null
-        val c = engine.incrementalFunction<Int>("c") { b!!() / 2 }
-        b = engine.incrementalFunction<Int>("b") { a.getValue() + c() }
+        val c = engine.incrementalFunction<Int>("c") {
+            b!!() / 2
+        }
+        b = engine.incrementalFunction<Int>("b") {
+            a.getValue() + c()
+        }
 
         assertFailsWith(DependencyCycleException::class) { c() }
         assertFailsWith(DependencyCycleException::class) { b() }

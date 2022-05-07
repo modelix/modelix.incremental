@@ -51,25 +51,26 @@ actual class IncrementalEngine actual constructor() : IIncrementalEngine, IDepen
 
             node = graph.getOrAddNode(engineValueKey) as DependencyGraph.ComputedNode
             state = node.getState()
-            when (node.getState()) {
+            when (state) {
                 ECacheEntryState.VALID -> {
                     value = node.getValue() as T
                 }
                 ECacheEntryState.FAILED -> {
                     exception = node.getValue() as Throwable
                 }
-                ECacheEntryState.VALIDATING -> {
-                    asyncValue = node.activeValidation
-                }
                 else -> {
                     evaluation = Evaluation(engineValueKey, engineValueKey.call, kotlin.coroutines.coroutineContext[Evaluation])
                     evaluation!!.detectCycle()
-                    withContext(evaluation!!) {
-                        node.startValidation()
-                        asyncValue = engineScope.async(dispatcher + activeEvaluation.asContextElement(evaluation)) {
-                            engineValueKey.call.invoke(IncrementalFunctionContext<T>(node)) as T
+                    if (state == ECacheEntryState.VALIDATING) {
+                        asyncValue = node.activeValidation
+                    } else {
+                        withContext(evaluation!!) {
+                            node.startValidation()
+                            asyncValue = engineScope.async(evaluation!! + activeEvaluation.asContextElement(evaluation)) {
+                                engineValueKey.call.invoke(IncrementalFunctionContext<T>(node)) as T
+                            }
+                            node.activeValidation = asyncValue
                         }
-                        node.activeValidation = asyncValue
                     }
                 }
             }
@@ -80,7 +81,7 @@ actual class IncrementalEngine actual constructor() : IIncrementalEngine, IDepen
                 value as T
             }
             ECacheEntryState.FAILED -> {
-                throw RuntimeException(exception)
+                throw exception!!
             }
             ECacheEntryState.VALIDATING -> {
                 asyncValue!!.await() as T
