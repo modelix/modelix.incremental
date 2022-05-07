@@ -1,5 +1,7 @@
 plugins {
     kotlin("multiplatform") version "1.6.10"
+    id("org.jetbrains.kotlinx.benchmark") version "0.4.2"
+    id("org.jetbrains.kotlin.plugin.allopen") version "1.6.21"
 }
 
 group = "org.modelix"
@@ -15,7 +17,7 @@ kotlin {
     *  https://kotlinlang.org/docs/reference/building-mpp-with-gradle.html#setting-up-targets */
 
     jvm()
-    js() {
+    js(IR) {
         //browser {}
         nodejs {
             testTask {
@@ -33,6 +35,7 @@ kotlin {
                 implementation("io.github.microutils:kotlin-logging:2.1.21")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.1")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.6.1")
+                implementation("org.jetbrains.kotlinx:kotlinx-benchmark-runtime:0.4.2")
             }
         }
         val commonTest by getting {
@@ -52,6 +55,25 @@ kotlin {
                 implementation(kotlin("test"))
                 implementation(kotlin("test-junit"))
             }
+        }
+    }
+}
+
+
+allOpen {
+    annotation("org.openjdk.jmh.annotations.State")
+}
+
+benchmark {
+    targets {
+        register("jvmTest")
+        //register("js")
+    }
+    configurations {
+        named("main") {
+            warmups = 1
+            iterations = 5
+            include(".*")
         }
     }
 }
