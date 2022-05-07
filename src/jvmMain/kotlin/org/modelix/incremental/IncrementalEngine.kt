@@ -4,7 +4,6 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.util.Collections
 import kotlin.collections.HashSet
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
@@ -13,13 +12,12 @@ actual class IncrementalEngine actual constructor() : IIncrementalEngine, IDepen
 
     private val graph = DependencyGraph(this)
     private val dispatcher = Dispatchers.Default
-    private val graphDispatcher = dispatcher.limitedParallelism(1)
     private val activeEvaluation: ThreadLocal<Evaluation?> = ThreadLocal()
     private var autoValidator: Job? = null
     private var disposed = false
     private val pendingModifications: Channel<IDependencyKey> = Channel(capacity = Channel.UNLIMITED)
-    private val pendingModificationsMutex = Mutex()
     private val autoValidationsMutex = Mutex()
+    private val graphMutex = Mutex()
     private val engineScope = CoroutineScope(dispatcher)
 
     init {
@@ -36,51 +34,76 @@ actual class IncrementalEngine actual constructor() : IIncrementalEngine, IDepen
         val keys = calls.map { EngineValueDependency(this, it) }
         keys.forEach { DependencyTracking.accessed(it) }
         return coroutineScope {
-            val futures: List<Deferred<T>> = withContext(dispatcher) {
-                keys.map { key -> async { update(key) } }
-            }
+            val futures: List<Deferred<T>> = keys.map { key -> async { update(key) } }
             futures.map { it.await() }
         }
     }
 
     private suspend fun <T> update(engineValueKey: EngineValueDependency<T>): T {
-        return withContext(graphDispatcher) {
+        var value: T? = null
+        var exception: Throwable? = null
+        var state: ECacheEntryState = ECacheEntryState.NEW
+        var asyncValue: Deferred<Any?>? = null
+        var node: DependencyGraph.ComputedNode
+        var evaluation: Evaluation? = null
+        graphMutex.withLock {
             processPendingModifications()
 
-            val node: DependencyGraph.ComputedNode = graph.getOrAddNode(engineValueKey) as DependencyGraph.ComputedNode
+            node = graph.getOrAddNode(engineValueKey) as DependencyGraph.ComputedNode
+            state = node.getState()
             when (node.getState()) {
-                ECacheEntryState.VALID -> return@withContext node.getValue() as T
-                ECacheEntryState.FAILED -> throw node.getValue() as Throwable
-                else -> {}
+                ECacheEntryState.VALID -> {
+                    value = node.getValue() as T
+                }
+                ECacheEntryState.FAILED -> {
+                    exception = node.getValue() as Throwable
+                }
+                ECacheEntryState.VALIDATING -> {
+                    asyncValue = node.activeValidation
+                }
+                else -> {
+                    evaluation = Evaluation(engineValueKey, engineValueKey.call, kotlin.coroutines.coroutineContext[Evaluation])
+                    evaluation!!.detectCycle()
+                    withContext(evaluation!!) {
+                        node.startValidation()
+                        asyncValue = engineScope.async(dispatcher + activeEvaluation.asContextElement(evaluation)) {
+                            engineValueKey.call.invoke(IncrementalFunctionContext<T>(node)) as T
+                        }
+                        node.activeValidation = asyncValue
+                    }
+                }
             }
+        }
 
-            val evaluation = Evaluation(engineValueKey, engineValueKey.call, kotlin.coroutines.coroutineContext[Evaluation])
-            evaluation.detectCycle()
-            withContext(evaluation) {
-                var asyncValue: Deferred<Any?>? = if (node.getState() == ECacheEntryState.VALIDATING) node.activeValidation else null
-                if (asyncValue == null) {
-                    node.startValidation()
-                    asyncValue = async(dispatcher + activeEvaluation.asContextElement(evaluation)) {
-                        engineValueKey.call.invoke(IncrementalFunctionContext<T>(node)) as T
+        return when (state) {
+            ECacheEntryState.VALID -> {
+                value as T
+            }
+            ECacheEntryState.FAILED -> {
+                throw RuntimeException(exception)
+            }
+            ECacheEntryState.VALIDATING -> {
+                asyncValue!!.await() as T
+            }
+            else -> {
+                try {
+                    val value = asyncValue!!.await() as T
+                    graphMutex.withLock {
+                        node.validationSuccessful(value, evaluation!!.dependencies)
                     }
-                    node.activeValidation = asyncValue
-                    try {
-                        val value = asyncValue.await()
-                        node.validationSuccessful(value, evaluation.dependencies)
-                        value
-                    } catch (e: Throwable) {
-                        node.validationFailed(e, evaluation.dependencies)
-                        throw e
+                    value
+                } catch (e: Throwable) {
+                    graphMutex.withLock {
+                        node.validationFailed(e, evaluation!!.dependencies)
                     }
-                } else {
-                    asyncValue.await() as T
+                    throw e
                 }
             }
         }
     }
 
     override suspend fun <T> activate(call: IncrementalFunctionCall<T>): IActiveOutput<T> {
-        withContext(graphDispatcher) {
+        autoValidationsMutex.withLock {
             if (autoValidator == null) {
                 autoValidator = engineScope.launch(dispatcher) {
                     launch {
@@ -88,28 +111,31 @@ actual class IncrementalEngine actual constructor() : IIncrementalEngine, IDepen
                             autoValidationsMutex.withLock {
                                 var key = graph.autoValidationChannel.tryReceive()
                                 while (key.isSuccess) {
-                                    withContext(graphDispatcher) {
+                                    engineScope.launch {
                                         update(key.getOrThrow())
                                     }
                                     key = graph.autoValidationChannel.tryReceive()
                                 }
-                                delay(10)
                             }
+                            delay(10)
                         }
                     }
                     launch {
                         while (!disposed) {
-                            processPendingModifications()
+                            graphMutex.withLock {
+                                processPendingModifications()
+                            }
+                            delay(10)
                         }
                     }
                 }
             }
-
-            val key = EngineValueDependency(this@IncrementalEngine, call)
-            val node = graph.getOrAddNode(key) as DependencyGraph.ComputedNode
-            node.autoValidate = true
-            graph.autoValidationChannel.send(key)
         }
+
+        val key = EngineValueDependency(this@IncrementalEngine, call)
+        val node = graph.getOrAddNode(key) as DependencyGraph.ComputedNode
+        node.autoValidate = true
+        graph.autoValidationChannel.send(key)
         return ObservedOutput<T>(EngineValueDependency(this, call))
     }
 
@@ -118,15 +144,14 @@ actual class IncrementalEngine actual constructor() : IIncrementalEngine, IDepen
         evaluation.dependencies += key
     }
 
-    private suspend fun processPendingModifications() {
-        withContext(graphDispatcher) {
-            pendingModificationsMutex.withLock {
-                var modification = pendingModifications.tryReceive()
-                while (modification.isSuccess) {
-                    graph.getNode(modification.getOrThrow())?.invalidate()
-                    modification = pendingModifications.tryReceive()
-                }
-            }
+    /**
+     * requires lock on graphMutex
+     */
+    private fun processPendingModifications() {
+        var modification = pendingModifications.tryReceive()
+        while (modification.isSuccess) {
+            graph.getNode(modification.getOrThrow())?.invalidate()
+            modification = pendingModifications.tryReceive()
         }
     }
 
@@ -146,19 +171,17 @@ actual class IncrementalEngine actual constructor() : IIncrementalEngine, IDepen
     }
 
     override suspend fun flush() {
-        withContext(graphDispatcher) {
-            pendingModificationsMutex.withLock {
-                var modification = pendingModifications.tryReceive()
-                while (modification.isSuccess) {
-                    graph.getNode(modification.getOrThrow())?.invalidate()
-                    modification = pendingModifications.tryReceive()
-                }
-            }
-
+        graphMutex.withLock {
+            processPendingModifications()
+        }
+        coroutineScope {
             autoValidationsMutex.withLock {
                 var autoValidation = graph.autoValidationChannel.tryReceive()
                 while (autoValidation.isSuccess) {
-                    update(autoValidation.getOrThrow())
+                    val key = autoValidation.getOrThrow()
+                    launch { // engineScope is not used because flush should wait for the update calls
+                        update(key)
+                    }
                     autoValidation = graph.autoValidationChannel.tryReceive()
                 }
             }
@@ -229,8 +252,8 @@ actual class IncrementalEngine actual constructor() : IIncrementalEngine, IDepen
 
     private inner class ObservedOutput<E>(val key: EngineValueDependency<E>) : IActiveOutput<E> {
         override suspend fun deactivate() {
-            withContext(graphDispatcher) {
-                val node = (graph.getNode(key) ?: return@withContext) as DependencyGraph.ComputedNode
+            graphMutex.withLock {
+                val node = (graph.getNode(key) ?: return@withLock) as DependencyGraph.ComputedNode
                 // TODO there could be multiple instances for the same key
                 node.autoValidate = false
             }
