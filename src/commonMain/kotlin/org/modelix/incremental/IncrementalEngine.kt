@@ -24,13 +24,19 @@ class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyListene
         DependencyTracking.registerListener(this)
     }
 
+    private fun checkDisposed() {
+        if (disposed) throw IllegalStateException("engine is disposed")
+    }
+
     override suspend fun <T> compute(call: IncrementalFunctionCall<T>): T {
+        checkDisposed()
         val engineValueKey = EngineValueDependency(this, call)
         DependencyTracking.accessed(engineValueKey)
         return update(engineValueKey)
     }
 
     override suspend fun <T> computeAll(calls: List<IncrementalFunctionCall<T>>): List<T> {
+        checkDisposed()
         val keys = calls.map { EngineValueDependency(this, it) }
         keys.forEach { DependencyTracking.accessed(it) }
         return coroutineScope {
@@ -40,6 +46,7 @@ class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyListene
     }
 
     private suspend fun <T> update(engineValueKey: EngineValueDependency<T>): T {
+        checkDisposed()
         var value: T? = null
         var exception: Throwable? = null
         var state: ECacheEntryState = ECacheEntryState.NEW
@@ -66,7 +73,7 @@ class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyListene
                     } else {
                         withContext(evaluation!!) {
                             node.startValidation()
-                            asyncValue = engineScope.async(evaluation!! + activeEvaluation.asContextElement(evaluation)) {
+                            asyncValue = engineScope.async(evaluation!! + activeEvaluation.asContextElement(evaluation) + CoroutineName("${engineValueKey.call}")) {
                                 engineValueKey.call.invoke(IncrementalFunctionContext<T>(node)) as T
                             }
                             node.activeValidation = asyncValue
@@ -104,6 +111,7 @@ class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyListene
     }
 
     override suspend fun <T> activate(call: IncrementalFunctionCall<T>): IActiveOutput<T> {
+        checkDisposed()
         autoValidationsMutex.withLock {
             if (autoValidator == null) {
                 autoValidator = engineScope.launch(dispatcher) {
@@ -143,13 +151,12 @@ class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyListene
         evaluation.dependencies += key
     }
 
-    /**
-     * requires lock on graphMutex
-     */
     private fun processPendingModifications() {
+        if (!graphMutex.isLocked) throw IllegalStateException("lock on graphMutex required")
         var modification = pendingModifications.tryReceive()
         while (modification.isSuccess) {
-            graph.getNode(modification.getOrThrow())?.invalidate()
+            val key = modification.getOrThrow()
+            graph.getNode(key)?.invalidate()
             modification = pendingModifications.tryReceive()
         }
     }
@@ -162,7 +169,7 @@ class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyListene
     fun dispose() {
         if (disposed) return
         disposed = true
-        engineScope.cancel()
+        engineScope.cancel(CancellationException("Engine disposed"))
         DependencyTracking.removeListener(this)
     }
 
@@ -171,6 +178,7 @@ class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyListene
     }
 
     override suspend fun flush() {
+        checkDisposed()
         graphMutex.withLock {
             processPendingModifications()
         }

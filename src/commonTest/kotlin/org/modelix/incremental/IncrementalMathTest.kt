@@ -1,5 +1,7 @@
 package org.modelix.incremental
 
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.TestScope
 import kotlin.test.*
 import kotlinx.coroutines.test.runTest
 import kotlin.time.ExperimentalTime
@@ -13,13 +15,17 @@ class IncrementalMathTest {
         engine = IncrementalEngine()
     }
 
-    @AfterTest
-    fun after() {
-        engine.dispose()
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun runTestAndCleanup(body: suspend TestScope.() -> Unit) = runTest {
+        try {
+            body()
+        } finally {
+            engine.dispose()
+        }
     }
 
     @Test
-    fun simpleCachingTest() = runTest {
+    fun simpleCachingTest() = runTestAndCleanup {
         val values = (1..10).map { TrackableValue(it) }
         var numInvocations = 0
         val sum = engine.incrementalFunction<Int>("sum") { context ->
@@ -35,7 +41,7 @@ class IncrementalMathTest {
     }
 
     @Test
-    fun transitiveDependencies() = runTest {
+    fun transitiveDependencies() = runTestAndCleanup {
         val a = TrackableValue(10)
         val b = TrackableValue(5)
         val c = engine.incrementalFunction<Int>("c") {
@@ -58,7 +64,7 @@ class IncrementalMathTest {
     }
 
     @Test
-    fun sideEffects() = runTest {
+    fun sideEffects() = runTestAndCleanup {
         val input = (1..3).map { TrackableValue(it) }
         val states = Array<Int>(3) { 0 }
         val f: IncrementalFunctionCall<Unit> = IncrementalFunctionCall0(IncrementalFunctionImplementation0("f") {
@@ -86,7 +92,7 @@ class IncrementalMathTest {
     }
 
     @Test
-    fun cycleDetection() = runTest {
+    fun cycleDetection() = runTestAndCleanup {
         val a = TrackableValue(5)
         var b: (suspend ()->Int)? = null
         val c = engine.incrementalFunction<Int>("c") {
@@ -101,15 +107,15 @@ class IncrementalMathTest {
     }
 
     @Test
-    fun parallelComputation() = runTest {
+    fun parallelComputation() = runTestAndCleanup {
         var primeFactors: ((Int) -> IncrementalFunctionCall1<List<Int>, Int>)? = null
         primeFactors = incrementalFunction<List<Int>, Int>("f") { _, n ->
             if (n < 2) emptyList() else ((2 .. n / 2).filter { p -> n % p == 0 }).filter { engine.compute(primeFactors!!(it)).isEmpty() }
         }
 
-        val b: IntRange = 2..10000
+        val b: IntRange = 2..1000
         val allFactors = engine.computeAll(b.map { primeFactors(it) }).flatten().distinct().sorted()
-        assertEquals(669, allFactors.size)
+        assertEquals(95, allFactors.size)
     }
 
     @Test
@@ -146,8 +152,8 @@ class IncrementalMathTest {
 
     @OptIn(ExperimentalTime::class)
     @Test
-    fun incremental() = runTest {
-        val input = TrackableList((0L..10000L).toMutableList())
+    fun incremental() = runTestAndCleanup {
+        val input = TrackableList((0L..1000L).toMutableList())
 
         var sum: ((Int, Int) -> IncrementalFunctionCall2<Long, Int, Int>)? = null
         sum = incrementalFunction<Long, Int, Int>("sum") { _, rangeStart, rangeEnd ->
@@ -163,23 +169,23 @@ class IncrementalMathTest {
         }
 
         println("Initial: " + measureTime {
-            assertEquals(50005000L, engine.compute(sum!!(0, input.size() - 1)))
+            assertEquals(500500L, engine.compute(sum!!(0, input.size() - 1)))
         })
         input.set(10, input.get(10) + 13)
-        input.set(1456, input.get(1456) + 7)
-        input.set(7654, input.get(7654) + 23)
+        input.set(145, input.get(145) + 7)
+        input.set(765, input.get(765) + 23)
         println("Incremental: " + measureTime {
-            assertEquals(50005000L + 13 + 7 + 23, engine.compute(sum!!(0, input.size() - 1)))
+            assertEquals(500500L + 13 + 7 + 23, engine.compute(sum!!(0, input.size() - 1)))
         })
         println("Non-incremental: " + measureTime {
-            assertEquals(50005000L + 13 + 7 + 23, input.asSequence().fold(0L) { acc, l -> acc + l })
+            assertEquals(500500L + 13 + 7 + 23, input.asSequence().fold(0L) { acc, l -> acc + l })
         })
     }
 
     @OptIn(ExperimentalTime::class)
     @Test
-    fun manyDependencies() = runTest {
-        val input = TrackableList((0L..10000L).toMutableList())
+    fun manyDependencies() = runTestAndCleanup {
+        val input = TrackableList((0L..1000L).toMutableList())
         val avg: () -> Long = {
             val sum = (0 until input.size()).asSequence()
                 .map { input.get(it) }
@@ -190,16 +196,16 @@ class IncrementalMathTest {
         }
 
         println("Initial: " + measureTime {
-            assertEquals(5000L, avgi())
+            assertEquals(500L, avgi())
         })
-        input.set(10, input.get(10) + 1000000)
-        input.set(1456, input.get(1456) + 3000000)
-        input.set(7654, input.get(7654) + 4000000)
+        input.set(10, input.get(10) + 100000)
+        input.set(145, input.get(145) + 300000)
+        input.set(765, input.get(765) + 400000)
         println("Incremental: " + measureTime {
-            assertEquals(5799L, avgi())
+            assertEquals(1299L, avgi())
         })
         println("Direct: " + measureTime {
-            assertEquals(5799L, avg())
+            assertEquals(1299L, avg())
         })
     }
 }
