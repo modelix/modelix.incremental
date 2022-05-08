@@ -112,9 +112,7 @@ actual class IncrementalEngine actual constructor() : IIncrementalEngine, IDepen
                             autoValidationsMutex.withLock {
                                 var key = graph.autoValidationChannel.tryReceive()
                                 while (key.isSuccess) {
-                                    engineScope.launch {
-                                        update(key.getOrThrow())
-                                    }
+                                    update(key.getOrThrow())
                                     key = graph.autoValidationChannel.tryReceive()
                                 }
                             }
@@ -135,7 +133,7 @@ actual class IncrementalEngine actual constructor() : IIncrementalEngine, IDepen
 
         val key = EngineValueDependency(this@IncrementalEngine, call)
         val node = graph.getOrAddNode(key) as DependencyGraph.ComputedNode
-        node.autoValidate = true
+        node.setAutoValidate(true)
         graph.autoValidationChannel.send(key)
         return ObservedOutput<T>(EngineValueDependency(this, call))
     }
@@ -256,7 +254,7 @@ actual class IncrementalEngine actual constructor() : IIncrementalEngine, IDepen
             graphMutex.withLock {
                 val node = (graph.getNode(key) ?: return@withLock) as DependencyGraph.ComputedNode
                 // TODO there could be multiple instances for the same key
-                node.autoValidate = false
+                node.setAutoValidate(false)
             }
         }
     }

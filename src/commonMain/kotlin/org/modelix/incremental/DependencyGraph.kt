@@ -8,6 +8,7 @@ import kotlinx.coroutines.channels.Channel
  */
 class DependencyGraph(val engine: IncrementalEngine) {
     val autoValidationChannel: Channel<EngineValueDependency<*>> = Channel(capacity = Channel.UNLIMITED)
+    val autoValidations: MutableSet<ComputedNode> = HashSet()
     private val nodes: MutableMap<IDependencyKey, Node> = HashMap()
 
     fun getNode(key: IDependencyKey): Node? = nodes[key]
@@ -119,9 +120,19 @@ class DependencyGraph(val engine: IncrementalEngine) {
         /**
          * if true, the engine will validate it directly after it got invalidated, without any external trigger
          */
-        var autoValidate: Boolean = false
+        private var autoValidate: Boolean = false
         fun getState(): ECacheEntryState = state
         fun getValue(): Any? = value
+        fun setAutoValidate(newValue: Boolean) {
+            if (newValue == autoValidate) return
+            autoValidate = newValue
+            if (newValue) {
+                autoValidations += this
+            } else {
+                autoValidations -= this
+            }
+        }
+        fun isAutoValidate() = autoValidate
         fun startValidation() {
             require(state != ECacheEntryState.VALIDATING) { "There is already an active validation for $key" }
             state = ECacheEntryState.VALIDATING
