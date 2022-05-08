@@ -83,6 +83,7 @@ benchmark {
             warmups = 4
             iterations = 5
             iterationTime = 1
+            outputTimeUnit = "s"
             //mode = "avgt"
             //reportFormat = "text"
             include(".*")
