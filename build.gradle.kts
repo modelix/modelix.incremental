@@ -56,6 +56,15 @@ kotlin {
                 implementation(kotlin("test-junit"))
             }
         }
+        val jsMain by getting {
+            dependencies {
+            }
+        }
+        val jsTest by getting {
+            dependencies {
+                implementation(kotlin("test-js"))
+            }
+        }
     }
 }
 
@@ -67,7 +76,7 @@ allOpen {
 benchmark {
     targets {
         register("jvmTest")
-        //register("js")
+        register("jsTest")
     }
     configurations {
         named("main") {
