@@ -114,6 +114,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
     inner class ComputedNode(override val key: EngineValueDependency<*>) : Node(key) {
         private var value: Any? = null
+        private var valueInitialized = false
         private var state: ECacheEntryState = ECacheEntryState.NEW
         var activeValidation: Deferred<Any?>? = null
 
@@ -123,6 +124,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
         private var autoValidate: Boolean = false
         fun getState(): ECacheEntryState = state
         fun getValue(): Any? = value
+        fun <T> getCurrentOrPreviousValue(): Optional<T> = if (valueInitialized) Optional.of(value as T) else Optional.empty()
         fun setAutoValidate(newValue: Boolean) {
             if (newValue == autoValidate) return
             autoValidate = newValue
@@ -140,12 +142,14 @@ class DependencyGraph(val engine: IncrementalEngine) {
         fun validationSuccessful(newValue: Any?, newDependencies: Set<IDependencyKey>) {
             require(state == ECacheEntryState.VALIDATING) { "There is no active validation for $key" }
             value = newValue
+            valueInitialized = true
             setDependencies(this, newDependencies)
             state = ECacheEntryState.VALID
         }
         fun validationFailed(exception: Throwable, newDependencies: Set<IDependencyKey>) {
             require(state == ECacheEntryState.VALIDATING) { "There is no active validation for $key" }
             value = exception
+            valueInitialized = false
             setDependencies(this, newDependencies)
             state = ECacheEntryState.FAILED
         }

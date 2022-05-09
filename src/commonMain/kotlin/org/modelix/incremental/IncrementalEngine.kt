@@ -217,12 +217,7 @@ class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyListene
 
     private inner class IncrementalFunctionContext<RetT>(val node: DependencyGraph.ComputedNode) : IIncrementalFunctionContext<RetT> {
         override fun getPreviousResult(): Optional<RetT> {
-            val state = node.getState()
-            return if (state == ECacheEntryState.FAILED || state == ECacheEntryState.NEW) {
-                Optional.empty()
-            } else {
-                Optional.of(node.getValue() as RetT)
-            }
+            return node.getCurrentOrPreviousValue<RetT>()
         }
 
         override fun getPreviousInput(key: IDependencyKey): Optional<*> {
