@@ -13,8 +13,8 @@ class TrackableList<E>(val list: MutableList<E>) {
     fun asSequence() = (0 until size()).asSequence().map { get(it) }
 }
 
-data class ListRangeDependency(val list: TrackableList<*>, val index: Int, val level: Int): IStateVariableReference {
-    override fun getGroup(): IStateVariableReference? {
+data class ListRangeDependency(val list: TrackableList<*>, val index: Int, val level: Int): IStateVariableReference<Any?> {
+    override fun getGroup(): IStateVariableGroup? {
         if (pow(2, level) >= list.size()) return null
         return ListRangeDependency(list, index / 2, level + 1)
     }
