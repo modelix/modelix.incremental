@@ -44,7 +44,7 @@ class IncrementalIndexTest {
                 }
             }
         val createIndex = engine.incrementalFunction<IncrementalIndex<Int, Int>>("createIndex") { context ->
-            val index: IncrementalIndex<Int, Int> = context.getPreviousResultOrElse { IncrementalIndex() }
+            val index: IncrementalIndex<Int, Int> = context.readOwnStateVariable { IncrementalIndex() }
             val incrementalList = buildIndex(0, input.size() - 1)
             index.update(incrementalList)
             index

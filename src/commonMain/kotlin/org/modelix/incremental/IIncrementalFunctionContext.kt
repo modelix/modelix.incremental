@@ -1,10 +1,11 @@
 package org.modelix.incremental
 
 interface IIncrementalFunctionContext<RetT> {
-    fun getPreviousResult(): Optional<RetT>
-    fun getPreviousInput(key: IStateVariableReference): Optional<*>
+    fun readOwnStateVariable(): Optional<RetT>
+    fun <T> readStateVariable(key: IStateVariableReference<T>): Optional<T>
+    fun <T> writeStateVariable(ref: IStateVariableReference<T>, value: T)
 }
 
-fun <T> IIncrementalFunctionContext<T>.getPreviousResultOrElse(defaultValue: ()->T): T {
-    return getPreviousResult().getOrElse(defaultValue)
+fun <T> IIncrementalFunctionContext<T>.readOwnStateVariable(defaultValue: ()->T): T {
+    return readOwnStateVariable().getOrElse(defaultValue)
 }

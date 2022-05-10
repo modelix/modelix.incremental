@@ -12,7 +12,7 @@ object DependencyTracking {
         listeners -= l
     }
 
-    fun accessed(key: IStateVariableReference) {
+    fun accessed(key: IStateVariableReference<*>) {
         for (it in listeners) {
             try {
                 it.accessed(key)
@@ -22,7 +22,7 @@ object DependencyTracking {
         }
     }
 
-    fun modified(key: IStateVariableReference) {
+    fun modified(key: IStateVariableReference<*>) {
         for (it in listeners) {
             try {
                 it.modified(key)

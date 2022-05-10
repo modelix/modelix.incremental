@@ -27,7 +27,7 @@ class ManyDependencies {
     @Benchmark
     fun manyDependencies() = runTest {
         input.set(10, input.get(10) + 1)
-        engine.compute(avgi)
+        engine.readStateVariable(avgi)
     }
 
     @Benchmark

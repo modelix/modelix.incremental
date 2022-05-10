@@ -63,7 +63,7 @@ abstract class IncrementalFunctionCall<RetT>() {
      * Shouldn't be invoked directly. Use IIncrementalEngine.compute(...) instead.
      */
     abstract suspend fun invoke(context: IIncrementalFunctionContext<RetT>): RetT
-    fun bind(engine: IIncrementalEngine): suspend () -> RetT = { engine.compute(this) }
+    fun bind(engine: IIncrementalEngine): suspend () -> RetT = { engine.readStateVariable(this) }
 }
 data class IncrementalFunctionCall0<RetT>(
     val function: IncrementalFunctionImplementation0<RetT>,
@@ -146,33 +146,33 @@ data class IncrementalFunctionCall6<RetT, P1, P2, P3, P4, P5, P6>(
 fun <RetT> IIncrementalEngine.incrementalFunction(name: String, body: suspend (IIncrementalFunctionContext<RetT>)->RetT): suspend () -> RetT {
     val impl = IncrementalFunctionImplementation0(name, body)
     val call = IncrementalFunctionCall0(impl)
-    return { this.compute(call) }
+    return { this.readStateVariable(call) }
 }
 
 fun <RetT, P1> IIncrementalEngine.incrementalFunction(name: String, body: suspend (IIncrementalFunctionContext<RetT>, P1)->RetT): suspend (P1) -> RetT {
     val impl = IncrementalFunctionImplementation1(name, body)
-    return { p1 -> this.compute(IncrementalFunctionCall1(impl, p1)) }
+    return { p1 -> this.readStateVariable(IncrementalFunctionCall1(impl, p1)) }
 }
 
 fun <RetT, P1, P2> IIncrementalEngine.incrementalFunction(name: String, body: suspend (IIncrementalFunctionContext<RetT>, P1, P2)->RetT): suspend (P1, P2) -> RetT {
     val impl = IncrementalFunctionImplementation2(name, body)
-    return { p1, p2 -> this.compute(IncrementalFunctionCall2(impl, p1, p2)) }
+    return { p1, p2 -> this.readStateVariable(IncrementalFunctionCall2(impl, p1, p2)) }
 }
 fun <RetT, P1, P2, P3> IIncrementalEngine.incrementalFunction(name: String, body: suspend (IIncrementalFunctionContext<RetT>, P1, P2, P3)->RetT): suspend (P1, P2, P3) -> RetT {
     val impl = IncrementalFunctionImplementation3(name, body)
-    return { p1, p2, p3 -> this.compute(IncrementalFunctionCall3(impl, p1, p2, p3)) }
+    return { p1, p2, p3 -> this.readStateVariable(IncrementalFunctionCall3(impl, p1, p2, p3)) }
 }
 fun <RetT, P1, P2, P3, P4> IIncrementalEngine.incrementalFunction(name: String, body: suspend (IIncrementalFunctionContext<RetT>, P1, P2, P3, P4)->RetT): suspend (P1, P2, P3, P4) -> RetT {
     val impl = IncrementalFunctionImplementation4(name, body)
-    return { p1, p2, p3, p4 -> this.compute(IncrementalFunctionCall4(impl, p1, p2, p3, p4)) }
+    return { p1, p2, p3, p4 -> this.readStateVariable(IncrementalFunctionCall4(impl, p1, p2, p3, p4)) }
 }
 fun <RetT, P1, P2, P3, P4, P5> IIncrementalEngine.incrementalFunction(name: String, body: suspend (IIncrementalFunctionContext<RetT>, P1, P2, P3, P4, P5)->RetT): suspend (P1, P2, P3, P4, P5) -> RetT {
     val impl = IncrementalFunctionImplementation5(name, body)
-    return { p1, p2, p3, p4, p5 -> this.compute(IncrementalFunctionCall5(impl, p1, p2, p3, p4, p5)) }
+    return { p1, p2, p3, p4, p5 -> this.readStateVariable(IncrementalFunctionCall5(impl, p1, p2, p3, p4, p5)) }
 }
 fun <RetT, P1, P2, P3, P4, P5, P6> IIncrementalEngine.incrementalFunction(name: String, body: (IIncrementalFunctionContext<RetT>, P1, P2, P3, P4, P5, P6)->RetT): suspend (P1, P2, P3, P4, P5, P6) -> RetT {
     val impl = IncrementalFunctionImplementation6(name, body)
-    return { p1, p2, p3, p4, p5, p6 -> this.compute(IncrementalFunctionCall6(impl, p1, p2, p3, p4, p5, p6)) }
+    return { p1, p2, p3, p4, p5, p6 -> this.readStateVariable(IncrementalFunctionCall6(impl, p1, p2, p3, p4, p5, p6)) }
 }
 
 fun <RetT> incrementalFunction(name: String, body: suspend (IIncrementalFunctionContext<RetT>)->RetT): IncrementalFunctionCall0<RetT> {

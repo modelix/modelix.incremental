@@ -8,14 +8,14 @@ import kotlin.collections.HashSet
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 
-class IncrementalEngine : IIncrementalEngine, IStateVariableReference, IDependencyListener {
+class IncrementalEngine : IIncrementalEngine, IStateVariableGroup, IDependencyListener {
 
     private val graph = DependencyGraph(this)
     private val dispatcher = Dispatchers.Default
     private val activeEvaluation: ThreadContextVariable<Evaluation?> = ThreadContextVariable()
     private var autoValidator: Job? = null
     private var disposed = false
-    private val pendingModifications: Channel<IStateVariableReference> = Channel(capacity = Channel.UNLIMITED)
+    private val pendingModifications: Channel<IStateVariableReference<*>> = Channel(capacity = Channel.UNLIMITED)
     private val autoValidationsMutex = Mutex()
     private val graphMutex = Mutex()
     private val engineScope = CoroutineScope(dispatcher)
@@ -28,14 +28,14 @@ class IncrementalEngine : IIncrementalEngine, IStateVariableReference, IDependen
         if (disposed) throw IllegalStateException("engine is disposed")
     }
 
-    override suspend fun <T> compute(call: IncrementalFunctionCall<T>): T {
+    override suspend fun <T> readStateVariable(call: IncrementalFunctionCall<T>): T {
         checkDisposed()
         val engineValueKey = EngineValueDependency(this, call)
         DependencyTracking.accessed(engineValueKey)
         return update(engineValueKey)
     }
 
-    override suspend fun <T> computeAll(calls: List<IncrementalFunctionCall<T>>): List<T> {
+    override suspend fun <T> readStateVariables(calls: List<IncrementalFunctionCall<T>>): List<T> {
         checkDisposed()
         val keys = calls.map { EngineValueDependency(this, it) }
         keys.forEach { DependencyTracking.accessed(it) }
@@ -146,7 +146,7 @@ class IncrementalEngine : IIncrementalEngine, IStateVariableReference, IDependen
         return ObservedOutput<T>(EngineValueDependency(this, call))
     }
 
-    override fun accessed(key: IStateVariableReference) {
+    override fun accessed(key: IStateVariableReference<*>) {
         val evaluation = activeEvaluation.getValue() ?: return
         evaluation.dependencies += key
     }
@@ -161,7 +161,7 @@ class IncrementalEngine : IIncrementalEngine, IStateVariableReference, IDependen
         }
     }
 
-    override fun modified(key: IStateVariableReference) {
+    override fun modified(key: IStateVariableReference<*>) {
         if (key is EngineValueDependency<*> && key.engine == this) return
         pendingModifications.trySend(key).onFailure { if (it != null) throw it }
     }
@@ -173,7 +173,7 @@ class IncrementalEngine : IIncrementalEngine, IStateVariableReference, IDependen
         DependencyTracking.removeListener(this)
     }
 
-    override fun getGroup(): IStateVariableReference? {
+    override fun getGroup(): IStateVariableGroup? {
         return null
     }
 
@@ -196,12 +196,12 @@ class IncrementalEngine : IIncrementalEngine, IStateVariableReference, IDependen
         }
     }
 
-    override fun <T> compute(call: IncrementalFunctionCall<T>, callback: (T) -> Unit) {
-        engineScope.launch { callback(compute(call)) }
+    override fun <T> readStateVariable(call: IncrementalFunctionCall<T>, callback: (T) -> Unit) {
+        engineScope.launch { callback(readStateVariable(call)) }
     }
 
-    override fun <T> computeAll(calls: List<IncrementalFunctionCall<T>>, callback: (List<T>) -> Unit) {
-        engineScope.launch { callback(computeAll(calls)) }
+    override fun <T> readStateVariables(calls: List<IncrementalFunctionCall<T>>, callback: (List<T>) -> Unit) {
+        engineScope.launch { callback(readStateVariables(calls)) }
     }
 
     override fun <T> activate(call: IncrementalFunctionCall<T>, callback: (IActiveOutput<T>) -> Unit) {
@@ -216,11 +216,15 @@ class IncrementalEngine : IIncrementalEngine, IStateVariableReference, IDependen
     }
 
     private inner class IncrementalFunctionContext<RetT>(val node: DependencyGraph.ComputedNode) : IIncrementalFunctionContext<RetT> {
-        override fun getPreviousResult(): Optional<RetT> {
+        override fun readOwnStateVariable(): Optional<RetT> {
             return node.getCurrentOrPreviousValue<RetT>()
         }
 
-        override fun getPreviousInput(key: IStateVariableReference): Optional<*> {
+        override fun <T> readStateVariable(key: IStateVariableReference<T>): Optional<T> {
+            TODO("Not yet implemented")
+        }
+
+        override fun <T> writeStateVariable(ref: IStateVariableReference<T>, value: T) {
             TODO("Not yet implemented")
         }
     }
@@ -232,7 +236,7 @@ class IncrementalEngine : IIncrementalEngine, IStateVariableReference, IDependen
     ) : AbstractCoroutineContextElement(Evaluation) {
         companion object Key : CoroutineContext.Key<Evaluation>
 
-        val dependencies: MutableSet<IStateVariableReference> = HashSet()
+        val dependencies: MutableSet<IStateVariableReference<*>> = HashSet()
 
         fun getEvaluations(): List<Evaluation> {
             return (previous?.getEvaluations() ?: emptyList()) + this

@@ -110,11 +110,11 @@ class IncrementalMathTest {
     fun parallelComputation() = runTestAndCleanup {
         var primeFactors: ((Int) -> IncrementalFunctionCall1<List<Int>, Int>)? = null
         primeFactors = incrementalFunction<List<Int>, Int>("f") { _, n ->
-            if (n < 2) emptyList() else ((2 .. n / 2).filter { p -> n % p == 0 }).filter { engine.compute(primeFactors!!(it)).isEmpty() }
+            if (n < 2) emptyList() else ((2 .. n / 2).filter { p -> n % p == 0 }).filter { engine.readStateVariable(primeFactors!!(it)).isEmpty() }
         }
 
         val b: IntRange = 2..1000
-        val allFactors = engine.computeAll(b.map { primeFactors(it) }).flatten().distinct().sorted()
+        val allFactors = engine.readStateVariables(b.map { primeFactors(it) }).flatten().distinct().sorted()
         assertEquals(95, allFactors.size)
     }
 
@@ -163,19 +163,19 @@ class IncrementalMathTest {
     //                input.get(rangeStart) + input.get(rangeEnd)
             } else {
                 val mid = (rangeStart + rangeEnd) / 2
-                val subsums = engine.computeAll(listOf(sum!!(rangeStart, mid), sum!!(mid + 1, rangeEnd)))
+                val subsums = engine.readStateVariables(listOf(sum!!(rangeStart, mid), sum!!(mid + 1, rangeEnd)))
                 subsums[0] + subsums[1]
             }
         }
 
         println("Initial: " + measureTime {
-            assertEquals(500500L, engine.compute(sum!!(0, input.size() - 1)))
+            assertEquals(500500L, engine.readStateVariable(sum!!(0, input.size() - 1)))
         })
         input.set(10, input.get(10) + 13)
         input.set(145, input.get(145) + 7)
         input.set(765, input.get(765) + 23)
         println("Incremental: " + measureTime {
-            assertEquals(500500L + 13 + 7 + 23, engine.compute(sum!!(0, input.size() - 1)))
+            assertEquals(500500L + 13 + 7 + 23, engine.readStateVariable(sum!!(0, input.size() - 1)))
         })
         println("Non-incremental: " + measureTime {
             assertEquals(500500L + 13 + 7 + 23, input.asSequence().fold(0L) { acc, l -> acc + l })

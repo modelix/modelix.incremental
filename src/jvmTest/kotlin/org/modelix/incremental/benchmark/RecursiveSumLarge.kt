@@ -21,7 +21,7 @@ class RecursiveSumLarge {
                 //                input.get(rangeStart) + input.get(rangeEnd)
             } else {
                 val mid = (rangeStart + rangeEnd) / 2
-                val subsums = engine.computeAll(listOf(sum!!(rangeStart, mid), sum!!(mid + 1, rangeEnd)))
+                val subsums = engine.readStateVariables(listOf(sum!!(rangeStart, mid), sum!!(mid + 1, rangeEnd)))
                 subsums[0] + subsums[1]
             }
         }
@@ -41,7 +41,7 @@ class RecursiveSumLarge {
     fun incremental() = runTest {
         input.set(modificationIndex, input.get(modificationIndex) + 1)
         modificationIndex = (modificationIndex + 1) % input.size()
-        engine.compute(sum!!(0, input.size() - 1))
+        engine.readStateVariable(sum!!(0, input.size() - 1))
     }
 }
 
