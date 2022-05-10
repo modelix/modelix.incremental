@@ -16,4 +16,6 @@ class TrackableValue<E>(initialValue: E) : IStateVariableReference<E>, IValueAcc
     override fun getGroup(): IStateVariableGroup? {
         return null
     }
+
+    override suspend fun read(): E  = getValue()
 }

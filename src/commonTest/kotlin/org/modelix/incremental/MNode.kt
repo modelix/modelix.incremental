@@ -6,8 +6,10 @@ class MNode(val type: String, var role: String? = null) : IStateVariableReferenc
     private val properties: MutableMap<String, String> = HashMap()
     private val references: MutableMap<String, MNode> = HashMap()
 
+    override suspend fun read(): MNode = this
+
     fun getChildren(role: String): List<MNode> {
-        DependencyTracking.accessed(RoleDependency(this, role))
+        DependencyTracking.accessed(ChildrenDependency(this, role))
         return children.filter { it.role == role }
     }
 
@@ -16,7 +18,8 @@ class MNode(val type: String, var role: String? = null) : IStateVariableReferenc
     fun child(type: String, role: String, initializer: MNode.()->Unit): MNode {
         val child = MNode(type, role)
         children += child
-        DependencyTracking.modified(RoleDependency(this, role))
+        DependencyTracking.modified(ChildrenDependency(this, role))
+        DependencyTracking.modified(AllChildrenDependency(this))
         initializer(child)
         return child
     }
@@ -27,11 +30,11 @@ class MNode(val type: String, var role: String? = null) : IStateVariableReferenc
         } else {
             properties[name] = value
         }
-        DependencyTracking.modified(RoleDependency(this, name))
+        DependencyTracking.modified(PropertyDependency(this, name))
     }
 
     fun getProperty(role: String): String? {
-        DependencyTracking.accessed(RoleDependency(this, role))
+        DependencyTracking.accessed(PropertyDependency(this, role))
         return properties[role]
     }
 
@@ -40,6 +43,15 @@ class MNode(val type: String, var role: String? = null) : IStateVariableReferenc
     }
 }
 
-data class RoleDependency(val node: MNode, val role: String) : IStateVariableReference<Any?> {
+data class PropertyDependency(val node: MNode, val role: String) : IStateVariableReference<String?> {
     override fun getGroup() = node
+    override suspend fun read(): String? = node.getProperty(role)
+}
+data class ChildrenDependency(val node: MNode, val role: String) : IStateVariableReference<List<MNode>> {
+    override fun getGroup() = node
+    override suspend fun read(): List<MNode> = node.getChildren(role)
+}
+data class AllChildrenDependency(val node: MNode) : IStateVariableReference<List<MNode>> {
+    override fun getGroup() = node
+    override suspend fun read(): List<MNode> = node.getAllChildren()
 }

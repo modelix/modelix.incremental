@@ -18,6 +18,10 @@ data class ListRangeDependency(val list: TrackableList<*>, val index: Int, val l
         if (pow(2, level) >= list.size()) return null
         return ListRangeDependency(list, index / 2, level + 1)
     }
+
+    override suspend fun read(): Any? {
+        TODO("Not yet implemented")
+    }
 }
 
 private fun pow(base: Int, exponent: Int): Int {
