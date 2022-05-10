@@ -1,6 +1,6 @@
 package org.modelix.incremental
 
-class TrackableValue<E>(initialValue: E) : IDependencyKey, IValueAccessor<E> {
+class TrackableValue<E>(initialValue: E) : IStateVariableReference, IValueAccessor<E> {
     private var value: E = initialValue
 
     override suspend fun getValue(): E {
@@ -13,7 +13,7 @@ class TrackableValue<E>(initialValue: E) : IDependencyKey, IValueAccessor<E> {
         DependencyTracking.modified(this)
     }
 
-    override fun getGroup(): IDependencyKey? {
+    override fun getGroup(): IStateVariableReference? {
         return null
     }
 }

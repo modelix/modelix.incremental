@@ -8,14 +8,14 @@ import kotlin.collections.HashSet
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 
-class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyListener {
+class IncrementalEngine : IIncrementalEngine, IStateVariableReference, IDependencyListener {
 
     private val graph = DependencyGraph(this)
     private val dispatcher = Dispatchers.Default
     private val activeEvaluation: ThreadContextVariable<Evaluation?> = ThreadContextVariable()
     private var autoValidator: Job? = null
     private var disposed = false
-    private val pendingModifications: Channel<IDependencyKey> = Channel(capacity = Channel.UNLIMITED)
+    private val pendingModifications: Channel<IStateVariableReference> = Channel(capacity = Channel.UNLIMITED)
     private val autoValidationsMutex = Mutex()
     private val graphMutex = Mutex()
     private val engineScope = CoroutineScope(dispatcher)
@@ -146,7 +146,7 @@ class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyListene
         return ObservedOutput<T>(EngineValueDependency(this, call))
     }
 
-    override fun accessed(key: IDependencyKey) {
+    override fun accessed(key: IStateVariableReference) {
         val evaluation = activeEvaluation.getValue() ?: return
         evaluation.dependencies += key
     }
@@ -161,7 +161,7 @@ class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyListene
         }
     }
 
-    override fun modified(key: IDependencyKey) {
+    override fun modified(key: IStateVariableReference) {
         if (key is EngineValueDependency<*> && key.engine == this) return
         pendingModifications.trySend(key).onFailure { if (it != null) throw it }
     }
@@ -173,7 +173,7 @@ class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyListene
         DependencyTracking.removeListener(this)
     }
 
-    override fun getGroup(): IDependencyKey? {
+    override fun getGroup(): IStateVariableReference? {
         return null
     }
 
@@ -220,7 +220,7 @@ class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyListene
             return node.getCurrentOrPreviousValue<RetT>()
         }
 
-        override fun getPreviousInput(key: IDependencyKey): Optional<*> {
+        override fun getPreviousInput(key: IStateVariableReference): Optional<*> {
             TODO("Not yet implemented")
         }
     }
@@ -232,7 +232,7 @@ class IncrementalEngine : IIncrementalEngine, IDependencyKey, IDependencyListene
     ) : AbstractCoroutineContextElement(Evaluation) {
         companion object Key : CoroutineContext.Key<Evaluation>
 
-        val dependencies: MutableSet<IDependencyKey> = HashSet()
+        val dependencies: MutableSet<IStateVariableReference> = HashSet()
 
         fun getEvaluations(): List<Evaluation> {
             return (previous?.getEvaluations() ?: emptyList()) + this

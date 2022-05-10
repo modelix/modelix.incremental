@@ -1,6 +1,6 @@
 package org.modelix.incremental
 
-class MNode(val type: String, var role: String? = null) : IDependencyKey {
+class MNode(val type: String, var role: String? = null) : IStateVariableReference {
     private val parent: MNode? = null
     private val children: MutableList<MNode> = ArrayList()
     private val properties: MutableMap<String, String> = HashMap()
@@ -35,11 +35,11 @@ class MNode(val type: String, var role: String? = null) : IDependencyKey {
         return properties[role]
     }
 
-    override fun getGroup(): IDependencyKey? {
+    override fun getGroup(): IStateVariableReference? {
         return parent
     }
 }
 
-data class RoleDependency(val node: MNode, val role: String) : IDependencyKey {
+data class RoleDependency(val node: MNode, val role: String) : IStateVariableReference {
     override fun getGroup() = node
 }

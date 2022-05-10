@@ -9,33 +9,33 @@ import kotlinx.coroutines.channels.Channel
 class DependencyGraph(val engine: IncrementalEngine) {
     val autoValidationChannel: Channel<EngineValueDependency<*>> = Channel(capacity = Channel.UNLIMITED)
     val autoValidations: MutableSet<ComputedNode> = HashSet()
-    private val nodes: MutableMap<IDependencyKey, Node> = HashMap()
+    private val nodes: MutableMap<IStateVariableReference, Node> = HashMap()
 
-    fun getNode(key: IDependencyKey): Node? = nodes[key]
+    fun getNode(key: IStateVariableReference): Node? = nodes[key]
 
-    fun getOrAddNode(key: IDependencyKey): Node = nodes.getOrPut(key) {
+    fun getOrAddNode(key: IStateVariableReference): Node = nodes.getOrPut(key) {
         if (key is EngineValueDependency<*> && key.engine == engine) ComputedNode(key) else InputNode(key)
     }
 
-    fun getDependencies(from: IDependencyKey): Set<IDependencyKey> {
+    fun getDependencies(from: IStateVariableReference): Set<IStateVariableReference> {
         val fromNode = nodes[from] ?: return emptySet()
         return fromNode.getDependencies().asSequence().map { it.key }.toSet()
     }
 
-    fun getReverseDependencies(from: IDependencyKey): Set<IDependencyKey> {
+    fun getReverseDependencies(from: IStateVariableReference): Set<IStateVariableReference> {
         val fromNode = nodes[from] ?: return emptySet()
         return fromNode.getReverseDependencies().asSequence().map { it.key }.toSet()
     }
 
-    fun setDependencies(from: IDependencyKey, to: Set<IDependencyKey>) {
+    fun setDependencies(from: IStateVariableReference, to: Set<IStateVariableReference>) {
         val fromNode = getOrAddNode(from)
         setDependencies(fromNode, to)
     }
 
-    fun setDependencies(fromNode: Node, to: Set<IDependencyKey>) {
+    fun setDependencies(fromNode: Node, to: Set<IStateVariableReference>) {
         val current = fromNode.getDependencies().asSequence().map { it.key }.toSet()
-        val addedDeps: Set<IDependencyKey> = to - current
-        val removedDeps: Set<IDependencyKey> = current - to
+        val addedDeps: Set<IStateVariableReference> = to - current
+        val removedDeps: Set<IStateVariableReference> = current - to
         for (dep in removedDeps) {
             fromNode.removeDependency(getOrAddNode(dep))
         }
@@ -44,19 +44,19 @@ class DependencyGraph(val engine: IncrementalEngine) {
         }
     }
 
-    fun addDependency(from: IDependencyKey, to: IDependencyKey) {
+    fun addDependency(from: IStateVariableReference, to: IStateVariableReference) {
         getOrAddNode(from).addDependency(getOrAddNode(to))
     }
 
-    fun removeDependency(from: IDependencyKey, to: IDependencyKey) {
+    fun removeDependency(from: IStateVariableReference, to: IStateVariableReference) {
         val fromNode = nodes[from] ?: return
         val toNode = nodes[to] ?: return
         fromNode.removeDependency(toNode)
     }
 
-    fun contains(key: IDependencyKey) = nodes.containsKey(key)
+    fun contains(key: IStateVariableReference) = nodes.containsKey(key)
 
-    open inner class Node(open val key: IDependencyKey) {
+    open inner class Node(open val key: IStateVariableReference) {
         private val reverseDependencies: MutableSet<Node> = HashSet()
         private val dependencies: MutableSet<Node> = HashSet()
 
@@ -108,7 +108,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
     }
 
-    inner class InputNode(key: IDependencyKey) : Node(key) {
+    inner class InputNode(key: IStateVariableReference) : Node(key) {
 
     }
 
@@ -139,14 +139,14 @@ class DependencyGraph(val engine: IncrementalEngine) {
             require(state != ECacheEntryState.VALIDATING) { "There is already an active validation for $key" }
             state = ECacheEntryState.VALIDATING
         }
-        fun validationSuccessful(newValue: Any?, newDependencies: Set<IDependencyKey>) {
+        fun validationSuccessful(newValue: Any?, newDependencies: Set<IStateVariableReference>) {
             require(state == ECacheEntryState.VALIDATING) { "There is no active validation for $key" }
             value = newValue
             valueInitialized = true
             setDependencies(this, newDependencies)
             state = ECacheEntryState.VALID
         }
-        fun validationFailed(exception: Throwable, newDependencies: Set<IDependencyKey>) {
+        fun validationFailed(exception: Throwable, newDependencies: Set<IStateVariableReference>) {
             require(state == ECacheEntryState.VALIDATING) { "There is no active validation for $key" }
             value = exception
             valueInitialized = false

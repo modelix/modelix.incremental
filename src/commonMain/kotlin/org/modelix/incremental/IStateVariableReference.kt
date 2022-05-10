@@ -1,6 +1,6 @@
 package org.modelix.incremental
 
-interface IDependencyKey {
+interface IStateVariableReference {
     /**
      * Groups form a tree of dependencies that are more detailed towards the leafs.
      * To save memory the engine can decrease the granularity of recorded dependencies and just record one of the groups
@@ -9,5 +9,5 @@ interface IDependencyKey {
      *
      * Example: In case of a dependency on a node in the model the groups would the ancestors of that node.
      */
-    fun getGroup(): IDependencyKey?
+    fun getGroup(): IStateVariableReference?
 }
