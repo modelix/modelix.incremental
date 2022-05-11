@@ -1,5 +1,5 @@
 plugins {
-    kotlin("multiplatform") version "1.6.10"
+    kotlin("multiplatform") version "1.6.20"
     id("org.jetbrains.kotlinx.benchmark") version "0.4.2"
     id("org.jetbrains.kotlin.plugin.allopen") version "1.6.21"
 }
@@ -22,7 +22,7 @@ kotlin {
         nodejs {
             testTask {
                 useMocha {
-                    //timeout = 30000
+                    timeout = "10s"
                 }
             }
         }
