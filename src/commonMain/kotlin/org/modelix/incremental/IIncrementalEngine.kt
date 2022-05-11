@@ -4,14 +4,14 @@ interface IIncrementalEngine {
     /**
      * Returns the cached value or computes it synchronously
      */
-    suspend fun <T> readStateVariable(call: IncrementalFunctionCall<T>): T
-    fun <T> readStateVariable(call: IncrementalFunctionCall<T>, callback: (T)->Unit)
+    suspend fun <T> readStateVariable(call: IStateVariableDeclaration<T>): T
+    fun <T> readStateVariable(call: IStateVariableDeclaration<T>, callback: (T)->Unit)
 
     /**
      * Computes multiple values in parallel
      */
-    suspend fun <T> readStateVariables(calls: List<IncrementalFunctionCall<T>>): List<T>
-    fun <T> readStateVariables(calls: List<IncrementalFunctionCall<T>>, callback: (List<T>)->Unit)
+    suspend fun <T> readStateVariables(calls: List<IStateVariableDeclaration<T>>): List<T>
+    fun <T> readStateVariables(calls: List<IStateVariableDeclaration<T>>, callback: (List<T>)->Unit)
 
 
 

@@ -28,16 +28,16 @@ class IncrementalEngine : IIncrementalEngine, IStateVariableGroup, IDependencyLi
         if (disposed) throw IllegalStateException("engine is disposed")
     }
 
-    override suspend fun <T> readStateVariable(call: IncrementalFunctionCall<T>): T {
+    override suspend fun <T> readStateVariable(call: IStateVariableDeclaration<T>): T {
         checkDisposed()
-        val engineValueKey = EngineValueDependency(this, call)
+        val engineValueKey = InternalStateVariableReference(this, call)
         DependencyTracking.accessed(engineValueKey)
         return update(engineValueKey)
     }
 
-    override suspend fun <T> readStateVariables(calls: List<IncrementalFunctionCall<T>>): List<T> {
+    override suspend fun <T> readStateVariables(calls: List<IStateVariableDeclaration<T>>): List<T> {
         checkDisposed()
-        val keys = calls.map { EngineValueDependency(this, it) }
+        val keys = calls.map { InternalStateVariableReference(this, it) }
         keys.forEach { DependencyTracking.accessed(it) }
         return coroutineScope {
             val futures: List<Deferred<T>> = keys.map { key -> async { update(key) } }
@@ -45,7 +45,7 @@ class IncrementalEngine : IIncrementalEngine, IStateVariableGroup, IDependencyLi
         }
     }
 
-    private suspend fun <T> update(engineValueKey: EngineValueDependency<T>): T {
+    private suspend fun <T> update(engineValueKey: InternalStateVariableReference<T>): T {
         checkDisposed()
         var value: T? = null
         var exception: Throwable? = null
@@ -66,18 +66,23 @@ class IncrementalEngine : IIncrementalEngine, IStateVariableGroup, IDependencyLi
                     exception = node.getValue() as Throwable
                 }
                 else -> {
-                    evaluation = Evaluation(engineValueKey, engineValueKey.call, kotlin.coroutines.coroutineContext[Evaluation])
-                    evaluation!!.detectCycle()
-                    if (state == ECacheEntryState.VALIDATING) {
-                        asyncValue = node.activeValidation
-                    } else {
-                        withContext(evaluation!!) {
-                            node.startValidation()
-                            asyncValue = engineScope.async(evaluation!! + activeEvaluation.asContextElement(evaluation) + CoroutineName("${engineValueKey.call}")) {
-                                engineValueKey.call.invoke(IncrementalFunctionContext<T>(node)) as T
+                    val decl = engineValueKey.decl
+                    if (decl is IncrementalFunctionCall) {
+                        evaluation = Evaluation(engineValueKey, decl, kotlin.coroutines.coroutineContext[Evaluation])
+                        evaluation!!.detectCycle()
+                        if (state == ECacheEntryState.VALIDATING) {
+                            asyncValue = node.activeValidation
+                        } else {
+                            withContext(evaluation!!) {
+                                node.startValidation()
+                                asyncValue = engineScope.async(evaluation!! + activeEvaluation.asContextElement(evaluation) + CoroutineName("${engineValueKey.decl}")) {
+                                    decl.invoke(IncrementalFunctionContext(node))
+                                }
+                                node.activeValidation = asyncValue
                             }
-                            node.activeValidation = asyncValue
                         }
+                    } else {
+                        TODO("State variables not implemented yet")
                     }
                 }
             }
@@ -139,11 +144,11 @@ class IncrementalEngine : IIncrementalEngine, IStateVariableGroup, IDependencyLi
             }
         }
 
-        val key = EngineValueDependency(this@IncrementalEngine, call)
+        val key = InternalStateVariableReference(this@IncrementalEngine, call)
         val node = graph.getOrAddNode(key) as DependencyGraph.ComputedNode
         node.setAutoValidate(true)
         graph.autoValidationChannel.send(key)
-        return ObservedOutput<T>(EngineValueDependency(this, call))
+        return ObservedOutput<T>(key)
     }
 
     override fun accessed(key: IStateVariableReference<*>) {
@@ -162,7 +167,7 @@ class IncrementalEngine : IIncrementalEngine, IStateVariableGroup, IDependencyLi
     }
 
     override fun modified(key: IStateVariableReference<*>) {
-        if (key is EngineValueDependency<*> && key.engine == this) return
+        if (key is InternalStateVariableReference<*> && key.engine == this) return
         pendingModifications.trySend(key).onFailure { if (it != null) throw it }
     }
 
@@ -196,11 +201,11 @@ class IncrementalEngine : IIncrementalEngine, IStateVariableGroup, IDependencyLi
         }
     }
 
-    override fun <T> readStateVariable(call: IncrementalFunctionCall<T>, callback: (T) -> Unit) {
+    override fun <T> readStateVariable(call: IStateVariableDeclaration<T>, callback: (T) -> Unit) {
         engineScope.launch { callback(readStateVariable(call)) }
     }
 
-    override fun <T> readStateVariables(calls: List<IncrementalFunctionCall<T>>, callback: (List<T>) -> Unit) {
+    override fun <T> readStateVariables(calls: List<IStateVariableDeclaration<T>>, callback: (List<T>) -> Unit) {
         engineScope.launch { callback(readStateVariables(calls)) }
     }
 
@@ -230,7 +235,7 @@ class IncrementalEngine : IIncrementalEngine, IStateVariableGroup, IDependencyLi
     }
 
     private class Evaluation(
-        val dependencyKey: EngineValueDependency<*>,
+        val dependencyKey: IStateVariableReference<*>,
         val call: IncrementalFunctionCall<*>,
         val previous: Evaluation?,
     ) : AbstractCoroutineContextElement(Evaluation) {
@@ -257,13 +262,17 @@ class IncrementalEngine : IIncrementalEngine, IStateVariableGroup, IDependencyLi
         }
     }
 
-    private inner class ObservedOutput<E>(val key: EngineValueDependency<E>) : IActiveOutput<E> {
+    private inner class ObservedOutput<E>(val key: IStateVariableReference<E>) : IActiveOutput<E> {
         override suspend fun deactivate() {
             graphMutex.withLock {
                 val node = (graph.getNode(key) ?: return@withLock) as DependencyGraph.ComputedNode
                 // TODO there could be multiple instances for the same key
                 node.setAutoValidate(false)
             }
+        }
+
+        protected fun finalize() {
+            engineScope.launch { deactivate() }
         }
     }
 }

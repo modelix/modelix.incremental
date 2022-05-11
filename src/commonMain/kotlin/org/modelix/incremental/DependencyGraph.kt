@@ -7,14 +7,14 @@ import kotlinx.coroutines.channels.Channel
  * Not thread-safe.
  */
 class DependencyGraph(val engine: IncrementalEngine) {
-    val autoValidationChannel: Channel<EngineValueDependency<*>> = Channel(capacity = Channel.UNLIMITED)
+    val autoValidationChannel: Channel<InternalStateVariableReference<*>> = Channel(capacity = Channel.UNLIMITED)
     val autoValidations: MutableSet<ComputedNode> = HashSet()
     private val nodes: MutableMap<IStateVariableReference<*>, Node> = HashMap()
 
     fun getNode(key: IStateVariableReference<*>): Node? = nodes[key]
 
     fun getOrAddNode(key: IStateVariableReference<*>): Node = nodes.getOrPut(key) {
-        if (key is EngineValueDependency<*> && key.engine == engine) ComputedNode(key) else InputNode(key)
+        if (key is InternalStateVariableReference<*> && key.engine == engine) ComputedNode(key) else InputNode(key)
     }
 
     fun getDependencies(from: IStateVariableReference<*>): Set<IStateVariableReference<*>> {
@@ -112,7 +112,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
     }
 
-    inner class ComputedNode(override val key: EngineValueDependency<*>) : Node(key) {
+    inner class ComputedNode(override val key: InternalStateVariableReference<*>) : Node(key) {
         private var value: Any? = null
         private var valueInitialized = false
         private var state: ECacheEntryState = ECacheEntryState.NEW
