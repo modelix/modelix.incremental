@@ -8,6 +8,8 @@ interface IStateVariableGroup {
      * granularity only for those inputs that don't change often. It's a space-time trade off.
      *
      * Example: In case of a dependency on a node in the model the groups would the ancestors of that node.
+     *
+     * A change of the group has to be notified.
      */
     fun getGroup(): IStateVariableGroup?
 }

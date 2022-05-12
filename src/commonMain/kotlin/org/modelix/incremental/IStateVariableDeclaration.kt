@@ -1,5 +1,13 @@
 package org.modelix.incremental
 
+/**
+ * An IStateVariableDeclaration is an identifier for a state variable inside an IIncrementalEngine.
+ * Multiple engine instances can have their own instance of a variable for the same IStateVariableDeclaration.
+ * The combination of the IStateVariableDeclaration and the IIncrementalEngine is an IStateVariableReference,
+ * (in this case InternalStateVariableReference). IStateVariableReference is unique identifier across the whole system
+ * including variables outside any engine.
+ * The state variable can have parameters that are accessible from computations.
+ */
 interface IStateVariableDeclaration<V>
 data class StateVariableDeclaration0<V>(val name: String) : IStateVariableDeclaration<V>
 data class StateVariableDeclaration1<V, P1>(val name: String, val p1: P1) : IStateVariableDeclaration<V>

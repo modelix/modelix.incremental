@@ -171,6 +171,10 @@ class IncrementalEngine : IIncrementalEngine, IStateVariableGroup, IDependencyLi
         pendingModifications.trySend(key).onFailure { if (it != null) throw it }
     }
 
+    override fun parentGroupChanged(childGroup: IStateVariableGroup) {
+        TODO("Not yet implemented")
+    }
+
     fun dispose() {
         if (disposed) return
         disposed = true

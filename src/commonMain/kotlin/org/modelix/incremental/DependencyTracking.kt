@@ -31,4 +31,14 @@ object DependencyTracking {
             }
         }
     }
+
+    fun parentGroupChanged(childGroup: IStateVariableGroup) {
+        for (it in listeners) {
+            try {
+                it.parentGroupChanged(childGroup)
+            } catch (e: Exception) {
+                logger.error(e) { "Exception in listener" }
+            }
+        }
+    }
 }
