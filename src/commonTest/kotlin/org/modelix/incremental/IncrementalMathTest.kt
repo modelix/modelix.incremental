@@ -12,7 +12,7 @@ class IncrementalMathTest {
 
     @BeforeTest
     fun before() {
-        engine = IncrementalEngine()
+        engine = IncrementalEngine(1000)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

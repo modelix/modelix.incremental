@@ -13,3 +13,14 @@ interface IStateVariableGroup {
      */
     fun getGroup(): IStateVariableGroup?
 }
+
+fun IStateVariableGroup.iterateGroups(): Sequence<IStateVariableGroup> {
+    return sequence {
+        yield(this@iterateGroups)
+        var current: IStateVariableGroup? = this@iterateGroups.getGroup()
+        while (current != null) {
+            yield(current)
+            current = current.getGroup()
+        }
+    }
+}

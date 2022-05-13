@@ -7,7 +7,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlin.collections.HashSet
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
-import kotlin.math.max
 
 class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IStateVariableGroup, IDependencyListener {
 
@@ -173,7 +172,13 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
         var modification = pendingModifications.tryReceive()
         while (modification.isSuccess) {
             val key = modification.getOrThrow()
-            graph.getNode(key)?.invalidate()
+            for (group in key.iterateGroups()) {
+                val node = graph.getNode(group)
+                if (node != null) {
+                    node.invalidate()
+                    break
+                }
+            }
             modification = pendingModifications.tryReceive()
         }
     }
