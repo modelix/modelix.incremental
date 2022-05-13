@@ -6,12 +6,16 @@ import org.modelix.incremental.IncrementalEngine
 import org.modelix.incremental.IncrementalFunctionCall2
 import org.modelix.incremental.TrackableList
 import org.modelix.incremental.incrementalFunction
+import kotlin.random.Random
+import kotlin.test.assertEquals
 
 abstract class RecursiveSum(val graphSize: Int) {
     lateinit var engine: IncrementalEngine
     val input = TrackableList((0L..10000L).toMutableList())
     var sum: ((Int, Int) -> IncrementalFunctionCall2<Long, Int, Int>)? = null
     var modificationIndex: Int = 0
+    var expectedResult: Long = input.asSequence().fold(0L) { acc, i -> acc + i }
+    var rand = Random(12345)
     init {
         sum = incrementalFunction<Long, Int, Int>("sum") { _, rangeStart, rangeEnd ->
             if (rangeStart == rangeEnd) {
@@ -29,6 +33,7 @@ abstract class RecursiveSum(val graphSize: Int) {
     @Setup
     fun before() {
         engine = IncrementalEngine(maxSize = graphSize, maxActiveValidations = 100)
+        rand = Random(12345)
     }
 
     @TearDown
@@ -39,8 +44,10 @@ abstract class RecursiveSum(val graphSize: Int) {
     @Benchmark
     fun incremental() = runTest {
         input.set(modificationIndex, input.get(modificationIndex) + 1)
-        modificationIndex = (modificationIndex + 1) % input.size()
-        engine.readStateVariable(sum!!(0, input.size() - 1))
+        expectedResult++
+        modificationIndex = (modificationIndex + rand.nextInt(-100, 130) + input.size()) % input.size()
+        val actualResult = engine.readStateVariable(sum!!(0, input.size() - 1))
+        assertEquals(expectedResult, actualResult)
     }
 }
 
