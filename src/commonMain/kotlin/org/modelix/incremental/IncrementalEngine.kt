@@ -50,39 +50,42 @@ class IncrementalEngine : IIncrementalEngine, IStateVariableGroup, IDependencyLi
         var value: T? = null
         var exception: Throwable? = null
         var state: ECacheEntryState = ECacheEntryState.NEW
-        var asyncValue: Deferred<Any?>? = null
-        var node: DependencyGraph.ComputedNode
+        var asyncValue: Deferred<T>? = null
+        var node_: DependencyGraph.InternalStateNode<T>
         var evaluation: Evaluation? = null
         graphMutex.withLock {
             processPendingModifications()
 
-            node = graph.getOrAddNode(engineValueKey) as DependencyGraph.ComputedNode
-            state = node.getState()
-            when (state) {
-                ECacheEntryState.VALID -> {
-                    value = node.getValue() as T
-                }
-                ECacheEntryState.FAILED -> {
-                    exception = node.getValue() as Throwable
-                }
-                else -> {
-                    val decl = engineValueKey.decl
-                    if (decl is IncrementalFunctionCall) {
-                        evaluation = Evaluation(engineValueKey, decl, kotlin.coroutines.coroutineContext[Evaluation])
-                        evaluation!!.detectCycle()
-                        if (state == ECacheEntryState.VALIDATING) {
-                            asyncValue = node.activeValidation
-                        } else {
-                            withContext(evaluation!!) {
-                                node.startValidation()
-                                asyncValue = engineScope.async(evaluation!! + activeEvaluation.asContextElement(evaluation) + CoroutineName("${engineValueKey.decl}")) {
-                                    decl.invoke(IncrementalFunctionContext(node))
+            node_ = graph.getOrAddNode(engineValueKey) as DependencyGraph.InternalStateNode<T>
+            val node = node_
+            if (node is DependencyGraph.ComputationNode) {
+                state = node.getState()
+                when (state) {
+                    ECacheEntryState.VALID -> {
+                        value = node.getValue().getValue()
+                    }
+                    ECacheEntryState.FAILED -> {
+                        exception = node.lastException
+                    }
+                    else -> {
+                        val decl = engineValueKey.decl
+                        if (decl is IComputationDeclaration) {
+                            evaluation = Evaluation(engineValueKey, decl, kotlin.coroutines.coroutineContext[Evaluation])
+                            evaluation!!.detectCycle()
+                            if (state == ECacheEntryState.VALIDATING) {
+                                asyncValue = node.activeValidation
+                            } else {
+                                withContext(evaluation!!) {
+                                    node.startValidation()
+                                    asyncValue = engineScope.async(evaluation!! + activeEvaluation.asContextElement(evaluation) + CoroutineName("${engineValueKey.decl}")) {
+                                        decl.invoke(IncrementalFunctionContext(node))
+                                    }
+                                    node.activeValidation = asyncValue
                                 }
-                                node.activeValidation = asyncValue
                             }
+                        } else {
+                            // TODO run triggers
                         }
-                    } else {
-                        TODO("State variables not implemented yet")
                     }
                 }
             }
@@ -99,17 +102,22 @@ class IncrementalEngine : IIncrementalEngine, IStateVariableGroup, IDependencyLi
                 asyncValue!!.await() as T
             }
             else -> {
-                try {
-                    val value = asyncValue!!.await() as T
-                    graphMutex.withLock {
-                        node.validationSuccessful(value, evaluation!!.dependencies)
+                val node = node_
+                if (node is DependencyGraph.ComputationNode) {
+                    try {
+                        val value = asyncValue!!.await() as T
+                        graphMutex.withLock {
+                            node.validationSuccessful(value, evaluation!!.dependencies)
+                        }
+                        value
+                    } catch (e: Throwable) {
+                        graphMutex.withLock {
+                            node.validationFailed(e, evaluation!!.dependencies)
+                        }
+                        throw e
                     }
-                    value
-                } catch (e: Throwable) {
-                    graphMutex.withLock {
-                        node.validationFailed(e, evaluation!!.dependencies)
-                    }
-                    throw e
+                } else {
+                    node.getValue().getValue()
                 }
             }
         }
@@ -145,7 +153,7 @@ class IncrementalEngine : IIncrementalEngine, IStateVariableGroup, IDependencyLi
         }
 
         val key = InternalStateVariableReference(this@IncrementalEngine, call)
-        val node = graph.getOrAddNode(key) as DependencyGraph.ComputedNode
+        val node = graph.getOrAddNode(key) as DependencyGraph.ComputationNode<T>
         node.setAutoValidate(true)
         graph.autoValidationChannel.send(key)
         return ObservedOutput<T>(key)
@@ -224,9 +232,9 @@ class IncrementalEngine : IIncrementalEngine, IStateVariableGroup, IDependencyLi
         }
     }
 
-    private inner class IncrementalFunctionContext<RetT>(val node: DependencyGraph.ComputedNode) : IIncrementalFunctionContext<RetT> {
+    private inner class IncrementalFunctionContext<RetT>(val node: DependencyGraph.ComputationNode<RetT>) : IIncrementalFunctionContext<RetT> {
         override fun readOwnStateVariable(): Optional<RetT> {
-            return node.getCurrentOrPreviousValue<RetT>()
+            return node.getValue()
         }
 
         override fun <T> readStateVariable(key: IStateVariableReference<T>): Optional<T> {
@@ -240,7 +248,7 @@ class IncrementalEngine : IIncrementalEngine, IStateVariableGroup, IDependencyLi
 
     private class Evaluation(
         val dependencyKey: IStateVariableReference<*>,
-        val call: IncrementalFunctionCall<*>,
+        val call: IComputationDeclaration<*>,
         val previous: Evaluation?,
     ) : AbstractCoroutineContextElement(Evaluation) {
         companion object Key : CoroutineContext.Key<Evaluation>
@@ -269,7 +277,7 @@ class IncrementalEngine : IIncrementalEngine, IStateVariableGroup, IDependencyLi
     private inner class ObservedOutput<E>(val key: IStateVariableReference<E>) : IActiveOutput<E> {
         override suspend fun deactivate() {
             graphMutex.withLock {
-                val node = (graph.getNode(key) ?: return@withLock) as DependencyGraph.ComputedNode
+                val node = (graph.getNode(key) ?: return@withLock) as DependencyGraph.ComputationNode<E>
                 // TODO there could be multiple instances for the same key
                 node.setAutoValidate(false)
             }

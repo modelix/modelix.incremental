@@ -8,13 +8,19 @@ import kotlinx.coroutines.channels.Channel
  */
 class DependencyGraph(val engine: IncrementalEngine) {
     val autoValidationChannel: Channel<InternalStateVariableReference<*>> = Channel(capacity = Channel.UNLIMITED)
-    val autoValidations: MutableSet<ComputedNode> = HashSet()
+    val autoValidations: MutableSet<ComputationNode<*>> = HashSet()
     private val nodes: MutableMap<IStateVariableReference<*>, Node> = HashMap()
 
     fun getNode(key: IStateVariableReference<*>): Node? = nodes[key]
 
-    fun getOrAddNode(key: IStateVariableReference<*>): Node = nodes.getOrPut(key) {
-        if (key is InternalStateVariableReference<*> && key.engine == engine) ComputedNode(key) else InputNode(key)
+    fun <T> getOrAddNode(key: IStateVariableReference<T>): Node = nodes.getOrPut(key) {
+        if (key is InternalStateVariableReference && key.engine == engine)
+            if (key.decl is IComputationDeclaration)
+                ComputationNode<T>(key)
+            else
+                InternalStateNode(key)
+        else
+            ExternalStateNode(key)
     }
 
     fun getDependencies(from: IStateVariableReference<*>): Set<IStateVariableReference<*>> {
@@ -108,23 +114,29 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
     }
 
-    inner class InputNode(key: IStateVariableReference<*>) : Node(key) {
+    inner class ExternalStateNode(key: IStateVariableReference<*>) : Node(key) {
 
     }
 
-    inner class ComputedNode(override val key: InternalStateVariableReference<*>) : Node(key) {
-        private var value: Any? = null
-        private var valueInitialized = false
+    open inner class InternalStateNode<E>(override val key: InternalStateVariableReference<E>) : Node(key) {
+        private var value: Optional<E> = Optional.empty()
+        fun getValue() = value
+        fun setValue(value: E) {
+            this.value = Optional.of(value)
+        }
+    }
+
+    inner class ComputationNode<E>(key: InternalStateVariableReference<E>) : InternalStateNode<E>(key) {
+        var lastException: Throwable? = null
         private var state: ECacheEntryState = ECacheEntryState.NEW
-        var activeValidation: Deferred<Any?>? = null
+        var activeValidation: Deferred<E>? = null
 
         /**
          * if true, the engine will validate it directly after it got invalidated, without any external trigger
          */
         private var autoValidate: Boolean = false
+        fun getComputation(): IComputationDeclaration<E> = key.decl as IComputationDeclaration<E>
         fun getState(): ECacheEntryState = state
-        fun getValue(): Any? = value
-        fun <T> getCurrentOrPreviousValue(): Optional<T> = if (valueInitialized) Optional.of(value as T) else Optional.empty()
         fun setAutoValidate(newValue: Boolean) {
             if (newValue == autoValidate) return
             autoValidate = newValue
@@ -139,17 +151,16 @@ class DependencyGraph(val engine: IncrementalEngine) {
             require(state != ECacheEntryState.VALIDATING) { "There is already an active validation for $key" }
             state = ECacheEntryState.VALIDATING
         }
-        fun validationSuccessful(newValue: Any?, newDependencies: Set<IStateVariableReference<*>>) {
+        fun validationSuccessful(newValue: E, newDependencies: Set<IStateVariableReference<*>>) {
             require(state == ECacheEntryState.VALIDATING) { "There is no active validation for $key" }
-            value = newValue
-            valueInitialized = true
+            setValue(newValue)
+            lastException = null
             setDependencies(this, newDependencies)
             state = ECacheEntryState.VALID
         }
         fun validationFailed(exception: Throwable, newDependencies: Set<IStateVariableReference<*>>) {
             require(state == ECacheEntryState.VALIDATING) { "There is no active validation for $key" }
-            value = exception
-            valueInitialized = false
+            lastException = exception
             setDependencies(this, newDependencies)
             state = ECacheEntryState.FAILED
         }

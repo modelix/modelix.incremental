@@ -58,11 +58,11 @@ class IncrementalFunctionImplementation6<RetT, P1, P2, P3, P4, P5, P6>(
 /**
  * @param defaultValue Is used when a dependency cycle is detected.
  */
-abstract class IncrementalFunctionCall<RetT>() : IStateVariableDeclaration<RetT> {
+abstract class IncrementalFunctionCall<RetT>() : IComputationDeclaration<RetT> {
     /**
      * Shouldn't be invoked directly. Use IIncrementalEngine instead.
      */
-    abstract suspend fun invoke(context: IIncrementalFunctionContext<RetT>): RetT
+    abstract override suspend fun invoke(context: IIncrementalFunctionContext<RetT>): RetT
     fun bind(engine: IIncrementalEngine): suspend () -> RetT = { engine.readStateVariable(this) }
 }
 data class IncrementalFunctionCall0<RetT>(
