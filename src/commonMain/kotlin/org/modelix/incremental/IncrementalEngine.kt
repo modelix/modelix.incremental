@@ -8,7 +8,7 @@ import kotlin.collections.HashSet
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 
-class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IStateVariableGroup, IDependencyListener {
+class IncrementalEngine(var maxSize: Int = 100_000) : IIncrementalEngine, IStateVariableGroup, IDependencyListener {
 
     private val graph = DependencyGraph(this)
     private val dispatcher = Dispatchers.Default
@@ -19,6 +19,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
     private val autoValidationsMutex = Mutex()
     private val graphMutex = Mutex()
     private val engineScope = CoroutineScope(dispatcher)
+    private val numActiveComputations = AtomicLong()
 
     init {
         DependencyTracking.registerListener(this)
@@ -39,90 +40,104 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
         checkDisposed()
         val keys = calls.map { InternalStateVariableReference(this, it) }
         keys.forEach { DependencyTracking.accessed(it) }
-        return coroutineScope {
-            val futures: List<Deferred<T>> = keys.map { key -> async { update(key) } }
-            futures.map { it.await() }
+        return if (numActiveComputations.get() > 100) {
+            keys.map { update(it) }
+        } else {
+            coroutineScope {
+                val futures: List<Deferred<T>> = keys.map { key -> async { update(key) } }
+                futures.map { it.await() }
+            }
         }
     }
 
     private suspend fun <T> update(engineValueKey: InternalStateVariableReference<T>): T {
         checkDisposed()
-        var value: T? = null
-        var exception: Throwable? = null
-        var state: ECacheEntryState = ECacheEntryState.NEW
-        var asyncValue: Deferred<T>? = null
-        var node_: DependencyGraph.InternalStateNode<T>
-        var evaluation: Evaluation? = null
-        graphMutex.withLock {
-            processPendingModifications()
+        try {
+            numActiveComputations.incrementAndGet()
+            var value: T? = null
+            var exception: Throwable? = null
+            var state: ECacheEntryState = ECacheEntryState.NEW
+            var asyncValue: Deferred<T>? = null
+            var node_: DependencyGraph.InternalStateNode<T>
+            var evaluation: Evaluation? = null
+            graphMutex.withLock {
+                processPendingModifications()
 
-            node_ = graph.getOrAddNode(engineValueKey) as DependencyGraph.InternalStateNode<T>
-            val node = node_
-            if (node is DependencyGraph.ComputationNode) {
-                state = node.state
-                when (state) {
-                    ECacheEntryState.VALID -> {
-                        value = node.getValue().getValue()
-                    }
-                    ECacheEntryState.FAILED -> {
-                        exception = node.lastException
-                    }
-                    else -> {
-                        if (graph.getSize() >= maxSize) {
-                            graph.shrinkGraph(maxSize - maxSize / 10)
-                        }
-                        val decl = engineValueKey.decl
-                        if (decl is IComputationDeclaration) {
-                            evaluation = Evaluation(engineValueKey, decl, kotlin.coroutines.coroutineContext[Evaluation])
-                            evaluation!!.detectCycle()
-                            if (state == ECacheEntryState.VALIDATING) {
-                                asyncValue = node.activeValidation
-                            } else {
-                                withContext(evaluation!!) {
-                                    node.startValidation()
-                                    asyncValue = engineScope.async(evaluation!! + activeEvaluation.asContextElement(evaluation) + CoroutineName("${engineValueKey.decl}")) {
-                                        decl.invoke(IncrementalFunctionContext(node))
-                                    }
-                                    node.activeValidation = asyncValue
-                                }
-                            }
-                        } else {
-                            // TODO run triggers
-                        }
-                    }
-                }
-            }
-        }
-
-        return when (state) {
-            ECacheEntryState.VALID -> {
-                value as T
-            }
-            ECacheEntryState.FAILED -> {
-                throw exception!!
-            }
-            ECacheEntryState.VALIDATING -> {
-                asyncValue!!.await() as T
-            }
-            else -> {
+                node_ = graph.getOrAddNode(engineValueKey) as DependencyGraph.InternalStateNode<T>
                 val node = node_
                 if (node is DependencyGraph.ComputationNode) {
-                    try {
-                        val value = asyncValue!!.await() as T
-                        graphMutex.withLock {
-                            node.validationSuccessful(value, evaluation!!.dependencies)
+                    state = node.state
+                    when (state) {
+                        ECacheEntryState.VALID -> {
+                            value = node.getValue().getValue()
                         }
-                        value
-                    } catch (e: Throwable) {
-                        graphMutex.withLock {
-                            node.validationFailed(e, evaluation!!.dependencies)
+                        ECacheEntryState.FAILED -> {
+                            exception = node.lastException
                         }
-                        throw e
+                        else -> {
+                            if (graph.getSize() >= maxSize) {
+                                graph.shrinkGraph(maxSize - maxSize / 10)
+                            }
+                            val decl = engineValueKey.decl
+                            if (decl is IComputationDeclaration) {
+                                evaluation = Evaluation(engineValueKey, decl, kotlin.coroutines.coroutineContext[Evaluation])
+                                evaluation!!.detectCycle()
+
+                                // This dependency has to be added here, because the node may be removed from the graph
+                                // before the parent finishes evaluation and then the transitive dependencies are lost.
+                                evaluation!!.parent?.let { graph.getOrAddNode(it.dependencyKey).addDependency(node) }
+
+                                if (state == ECacheEntryState.VALIDATING) {
+                                    asyncValue = node.activeValidation
+                                } else {
+                                    withContext(evaluation!!) {
+                                        node.startValidation()
+                                        asyncValue = engineScope.async(evaluation!! + activeEvaluation.asContextElement(evaluation) + CoroutineName("${engineValueKey.decl}")) {
+                                            decl.invoke(IncrementalFunctionContext(node))
+                                        }
+                                        node.activeValidation = asyncValue
+                                    }
+                                }
+                            } else {
+                                // TODO run triggers
+                            }
+                        }
                     }
-                } else {
-                    node.getValue().getValue()
                 }
             }
+
+            return when (state) {
+                ECacheEntryState.VALID -> {
+                    value as T
+                }
+                ECacheEntryState.FAILED -> {
+                    throw exception!!
+                }
+                ECacheEntryState.VALIDATING -> {
+                    asyncValue!!.await() as T
+                }
+                else -> {
+                    val node = node_
+                    if (node is DependencyGraph.ComputationNode) {
+                        try {
+                            val value = asyncValue!!.await()
+                            graphMutex.withLock {
+                                node.validationSuccessful(value, evaluation!!.dependencies)
+                            }
+                            value
+                        } catch (e: Throwable) {
+                            graphMutex.withLock {
+                                node.validationFailed(e, evaluation!!.dependencies)
+                            }
+                            throw e
+                        }
+                    } else {
+                        node.getValue().getValue()
+                    }
+                }
+            }
+        } finally {
+            numActiveComputations.decrementAndGet()
         }
     }
 
@@ -258,27 +273,27 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
     private class Evaluation(
         val dependencyKey: IStateVariableReference<*>,
         val call: IComputationDeclaration<*>,
-        val previous: Evaluation?,
+        val parent: Evaluation?,
     ) : AbstractCoroutineContextElement(Evaluation) {
         companion object Key : CoroutineContext.Key<Evaluation>
 
         val dependencies: MutableSet<IStateVariableReference<*>> = HashSet()
 
         fun getEvaluations(): List<Evaluation> {
-            return (previous?.getEvaluations() ?: emptyList()) + this
+            return (parent?.getEvaluations() ?: emptyList()) + this
         }
 
         fun detectCycle() {
-            var current = previous
+            var current = parent
             while (current != null) {
                 if (current.dependencyKey == dependencyKey) {
-                    val activeEvaluations = previous!!.getEvaluations()
+                    val activeEvaluations = parent!!.getEvaluations()
                     val cycleStart = activeEvaluations.indexOfLast { it.dependencyKey == dependencyKey }
                     if (cycleStart != -1) {
                         throw DependencyCycleException(activeEvaluations.drop(cycleStart).map { it.call })
                     }
                 }
-                current = current.previous
+                current = current.parent
             }
         }
     }

@@ -13,7 +13,7 @@ class IncrementalIndexTest {
 
     @BeforeTest
     fun before() {
-        engine = IncrementalEngine(500)
+        engine = IncrementalEngine(10000)
         invocationCount = 0
     }
 

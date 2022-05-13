@@ -1,5 +1,8 @@
 package org.modelix.incremental
 
-expect class VirtualClock() {
-    fun getTime(): Long
+class VirtualClock() {
+    private val time = AtomicLong()
+    fun getTime(): Long {
+        return time.incrementAndGet()
+    }
 }

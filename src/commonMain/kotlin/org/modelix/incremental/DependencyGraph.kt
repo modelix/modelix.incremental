@@ -20,18 +20,18 @@ class DependencyGraph(val engine: IncrementalEngine) {
         val itr = lru.iterator()
         for (n1 in itr) {
             if (nodes.size <= targetSize) break
-            if (n1.state == ECacheEntryState.VALIDATING) continue
+            if (n1.state == ECacheEntryState.VALIDATING || n1.state == ECacheEntryState.NEW) continue
             var removeNode = false
             when (n1) {
                 is ExternalStateNode<*> -> {
-                    val parentGroup = n1.getReverseDependencies().filterIsInstance<ExternalStateNode<*>>().firstOrNull()
-                    if (parentGroup == null) continue
-                    if (n1.getDependencies().isNotEmpty()) continue
-                    for (n2 in n1.getReverseDependencies().toList()) {
-                        n2.removeDependency(n1)
-                        n2.addDependency(parentGroup)
-                    }
-                    removeNode = true
+//                    val parentGroup = n1.getReverseDependencies().filterIsInstance<ExternalStateNode<*>>().firstOrNull()
+//                    if (parentGroup == null) continue
+//                    if (n1.getDependencies().isNotEmpty()) continue
+//                    for (n2 in n1.getReverseDependencies().toList()) {
+//                        n2.removeDependency(n1)
+//                        n2.addDependency(parentGroup)
+//                    }
+//                    removeNode = true
                 }
                 is InternalStateNode<*> -> {
                     if (n1.isAutoValidate()) continue
@@ -43,6 +43,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
                     for (n2 in n1.getReverseDependencies().toList()) {
                         n2.removeDependency(n1)
                         dependencies.forEach { n0 -> n2.addDependency(n0) }
+                        //println("Merged $n1 into $n2")
                     }
                     removeNode = true
                 }
@@ -53,6 +54,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
                 require(n1.getReverseDependencies().isEmpty()) { "$n1 still has reverse dependencies" }
                 nodes.remove(n1.key)
                 itr.remove()
+                //println("Removed ${n1.key}")
             }
         }
     }
@@ -136,7 +138,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
                     lru.add(this)
                 }
                 if (previousState == ECacheEntryState.VALID) {
-                    println("Invalidated: $key")
+                    //println("Invalidated: $key")
                 }
             }
         private var lastValidation: Long = 0L

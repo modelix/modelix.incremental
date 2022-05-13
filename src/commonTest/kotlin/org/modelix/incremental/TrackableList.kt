@@ -22,6 +22,13 @@ data class ListRangeDependency(val list: TrackableList<*>, val index: Int, val l
     override suspend fun read(): Any? {
         TODO("Not yet implemented")
     }
+
+    fun firstIndex() = pow(2, level) * index
+    fun lastIndex() = pow(2, level) * (index + 1) - 1
+
+    override fun toString(): String {
+        return "ListRangeDependency($list, ${firstIndex()}..${lastIndex()})"
+    }
 }
 
 private fun pow(base: Int, exponent: Int): Int {

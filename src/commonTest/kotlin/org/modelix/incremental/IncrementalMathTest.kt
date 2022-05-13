@@ -150,9 +150,18 @@ class IncrementalMathTest {
         return result
     }
 
-    @OptIn(ExperimentalTime::class)
     @Test
-    fun incremental() = runTestAndCleanup {
+    fun incremental10() = incrementalX(10)
+    @Test
+    fun incremental100() = incrementalX(100)
+    @Test
+    fun incremental1000() = incrementalX(1000)
+    @Test
+    fun incremental10000() = incrementalX(10000)
+
+    @OptIn(ExperimentalTime::class)
+    fun incrementalX(graphSizeLimit: Int) = runTestAndCleanup {
+        engine.maxSize = graphSizeLimit
         val input = TrackableList((0L..1000L).toMutableList())
 
         var sum: ((Int, Int) -> IncrementalFunctionCall2<Long, Int, Int>)? = null
