@@ -8,7 +8,7 @@ import kotlin.collections.HashSet
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 
-class IncrementalEngine(var maxSize: Int = 100_000) : IIncrementalEngine, IStateVariableGroup, IDependencyListener {
+class IncrementalEngine(var maxSize: Int = 100_000, var maxActiveValidations: Int = 1000) : IIncrementalEngine, IStateVariableGroup, IDependencyListener {
 
     private val graph = DependencyGraph(this)
     private val dispatcher = Dispatchers.Default
@@ -40,7 +40,7 @@ class IncrementalEngine(var maxSize: Int = 100_000) : IIncrementalEngine, IState
         checkDisposed()
         val keys = calls.map { InternalStateVariableReference(this, it) }
         keys.forEach { DependencyTracking.accessed(it) }
-        return if (numActiveComputations.get() > 100) {
+        return if (numActiveComputations.get() > maxActiveValidations) {
             keys.map { update(it) }
         } else {
             coroutineScope {

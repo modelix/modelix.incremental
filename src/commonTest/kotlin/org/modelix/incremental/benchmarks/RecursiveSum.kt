@@ -7,8 +7,7 @@ import org.modelix.incremental.IncrementalFunctionCall2
 import org.modelix.incremental.TrackableList
 import org.modelix.incremental.incrementalFunction
 
-@State(Scope.Benchmark)
-class RecursiveSum {
+abstract class RecursiveSum(val graphSize: Int) {
     lateinit var engine: IncrementalEngine
     val input = TrackableList((0L..10000L).toMutableList())
     var sum: ((Int, Int) -> IncrementalFunctionCall2<Long, Int, Int>)? = null
@@ -29,7 +28,7 @@ class RecursiveSum {
 
     @Setup
     fun before() {
-        engine = IncrementalEngine()
+        engine = IncrementalEngine(maxSize = graphSize)
     }
 
     @TearDown
@@ -45,5 +44,15 @@ class RecursiveSum {
     }
 }
 
+@State(Scope.Benchmark)
+class RecursiveSum100000() : RecursiveSum(100000)
+@State(Scope.Benchmark)
+class RecursiveSum10000() : RecursiveSum(10000)
+@State(Scope.Benchmark)
+class RecursiveSum5000() : RecursiveSum(5000)
+@State(Scope.Benchmark)
+class RecursiveSum2500() : RecursiveSum(2500)
+@State(Scope.Benchmark)
+class RecursiveSum1250() : RecursiveSum(1250)
 
 
