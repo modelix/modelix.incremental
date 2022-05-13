@@ -28,7 +28,7 @@ abstract class RecursiveSum(val graphSize: Int) {
 
     @Setup
     fun before() {
-        engine = IncrementalEngine(maxSize = graphSize)
+        engine = IncrementalEngine(maxSize = graphSize, maxActiveValidations = 100)
     }
 
     @TearDown

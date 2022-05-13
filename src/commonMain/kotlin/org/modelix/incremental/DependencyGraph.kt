@@ -24,14 +24,14 @@ class DependencyGraph(val engine: IncrementalEngine) {
             var removeNode = false
             when (n1) {
                 is ExternalStateNode<*> -> {
-//                    val parentGroup = n1.getReverseDependencies().filterIsInstance<ExternalStateNode<*>>().firstOrNull()
-//                    if (parentGroup == null) continue
-//                    if (n1.getDependencies().isNotEmpty()) continue
-//                    for (n2 in n1.getReverseDependencies().toList()) {
-//                        n2.removeDependency(n1)
-//                        n2.addDependency(parentGroup)
-//                    }
-//                    removeNode = true
+                    val parentGroup = n1.getReverseDependencies().filterIsInstance<ExternalStateNode<*>>().firstOrNull()
+                    if (parentGroup == null) continue
+                    if (n1.getDependencies().isNotEmpty()) continue
+                    for (n2 in n1.getReverseDependencies().toList()) {
+                        n2.removeDependency(n1)
+                        n2.addDependency(parentGroup)
+                    }
+                    removeNode = true
                 }
                 is InternalStateNode<*> -> {
                     if (n1.isAutoValidate()) continue
