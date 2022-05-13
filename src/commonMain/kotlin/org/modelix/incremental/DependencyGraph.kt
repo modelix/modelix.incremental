@@ -23,8 +23,9 @@ class DependencyGraph(val engine: IncrementalEngine) {
             if (n1.state == ECacheEntryState.VALIDATING || n1.state == ECacheEntryState.NEW) continue
             var removeNode = false
             when (n1) {
-                is ExternalStateNode<*> -> {
-                    val parentGroup = n1.getReverseDependencies().filterIsInstance<ExternalStateNode<*>>().firstOrNull()
+                is ExternalStateGroupNode -> {
+                    val parentGroup = n1.getReverseDependencies()
+                        .filterIsInstance<ExternalStateGroupNode>().firstOrNull()
                     if (parentGroup == null) continue
                     if (n1.getDependencies().isNotEmpty()) continue
                     for (n2 in n1.getReverseDependencies().toList()) {
@@ -78,7 +79,6 @@ class DependencyGraph(val engine: IncrementalEngine) {
                 external
             }
             nodes[key] = node
-            lru.add(node)
             if (parentGroup != null) {
                 val parentNode = getOrAddNodeAndGroups(parentGroup)
                 parentNode.addDependency(node)
@@ -144,12 +144,14 @@ class DependencyGraph(val engine: IncrementalEngine) {
         private var lastValidation: Long = 0L
         private val reverseDependencies: MutableSet<Node> = HashSet()
         private val dependencies: MutableSet<Node> = HashSet()
+        var transitiveDependenciesCount: Int = 0 // monotonic growth is intended
 
         fun addDependency(dependency: Node) {
             if (dependency == this) return
             require(nodes.containsKey(dependency.key)) { "Not part of the graph: $dependency" }
             dependencies += dependency
             dependency.addReverseDependency(this)
+            transitiveDependenciesCount = dependencies.fold(0) { acc, d -> acc + d.transitiveDependenciesCount }
         }
 
         fun removeDependency(dependency: Node) {
@@ -199,6 +201,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
         override fun toString(): String = "group[$key]"
 
         fun accessed() {
+            if (state == ECacheEntryState.VALID) return
             state = ECacheEntryState.VALID
             getReverseDependencies().filterIsInstance<ExternalStateGroupNode>().forEach { it.accessed() }
         }

@@ -41,6 +41,7 @@ class IncrementalEngine(var maxSize: Int = 100_000, var maxActiveValidations: In
         val keys = calls.map { InternalStateVariableReference(this, it) }
         keys.forEach { DependencyTracking.accessed(it) }
         return if (numActiveComputations.get() > maxActiveValidations) {
+            // depth first to prevent the graph from growing too fast
             keys.map { update(it) }
         } else {
             coroutineScope {
