@@ -29,7 +29,7 @@ class RecursiveSumLarge {
 
     @Setup
     fun before() {
-        engine = IncrementalEngine()
+        engine = IncrementalEngine(10_000_000)
     }
 
     @TearDown
