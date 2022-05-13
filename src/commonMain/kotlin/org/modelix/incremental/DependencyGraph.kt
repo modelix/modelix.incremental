@@ -8,19 +8,59 @@ import kotlinx.coroutines.channels.Channel
  */
 class DependencyGraph(val engine: IncrementalEngine) {
     val autoValidationChannel: Channel<InternalStateVariableReference<*>> = Channel(capacity = Channel.UNLIMITED)
-    val autoValidations: MutableSet<ComputationNode<*>> = HashSet()
+    val autoValidations: MutableSet<InternalStateNode<*>> = HashSet()
     private val nodes: MutableMap<IStateVariableReference<*>, Node> = HashMap()
+    private val lru = LinkedHashSet<Node>()
+    private val clock = VirtualClock()
+
+    fun getSize() = nodes.size
+
+    fun shrinkGraph(targetSize: Int) {
+        if (lru.isEmpty()) return
+        val itr = lru.iterator()
+        for (n1 in itr) {
+            if (nodes.size <= targetSize) break
+            if (n1.state == ECacheEntryState.VALIDATING) continue
+            when (n1) {
+                is ExternalStateNode<*> -> {
+                    val parentGroup = n1.getReverseDependencies().filterIsInstance<ExternalStateNode<*>>().firstOrNull()
+                    if (parentGroup == null) continue
+                    for (n2 in n1.getReverseDependencies().toList()) {
+                        n2.removeDependency(n1)
+                        n2.addDependency(parentGroup)
+                    }
+                }
+                is InternalStateNode<*> -> {
+                    if (n1.isAutoValidate()) continue
+                    // replace n2->n1->n0 with n2->n0
+                    val dependencies = n1.getDependencies().toList()
+                    for (n2 in n1.getReverseDependencies().toList()) {
+                        n2.removeDependency(n1)
+                        dependencies.forEach { n0 ->
+                            n1.removeDependency(n0)
+                            n2.addDependency(n0)
+                        }
+                    }
+                }
+                else -> throw RuntimeException("Unknown node type: " + n1::class)
+            }
+            itr.remove()
+            nodes.remove(n1.key)
+        }
+    }
 
     fun getNode(key: IStateVariableReference<*>): Node? = nodes[key]
 
     fun <T> getOrAddNode(key: IStateVariableReference<T>): Node = nodes.getOrPut(key) {
-        if (key is InternalStateVariableReference && key.engine == engine)
+        val newNode = if (key is InternalStateVariableReference && key.engine == engine)
             if (key.decl is IComputationDeclaration)
                 ComputationNode<T>(key)
             else
                 InternalStateNode(key)
         else
             ExternalStateNode(key)
+        lru.add(newNode)
+        newNode
     }
 
     fun getDependencies(from: IStateVariableReference<*>): Set<IStateVariableReference<*>> {
@@ -63,6 +103,18 @@ class DependencyGraph(val engine: IncrementalEngine) {
     fun contains(key: IStateVariableReference<*>) = nodes.containsKey(key)
 
     open inner class Node(open val key: IStateVariableReference<*>) {
+        var state: ECacheEntryState = ECacheEntryState.NEW
+            set(newState) {
+                val previousState = field
+                if (newState == previousState) return
+                field = newState
+                if (newState == ECacheEntryState.VALID) {
+                    lastValidation = clock.getTime()
+                    lru.remove(this)
+                    lru.add(this)
+                }
+            }
+        private var lastValidation: Long = 0L
         private val reverseDependencies: MutableSet<Node> = HashSet()
         private val dependencies: MutableSet<Node> = HashSet()
 
@@ -101,42 +153,31 @@ class DependencyGraph(val engine: IncrementalEngine) {
         fun isConnected() = dependencies.isNotEmpty() || reverseDependencies.isNotEmpty()
 
         open fun invalidate() {
+            state = ECacheEntryState.INVALID
             for (dep in getReverseDependencies()) {
                 dep.dependencyInvalidated()
             }
         }
 
         open fun dependencyInvalidated() {
+            state = ECacheEntryState.DEPENDENCY_INVALID
             for (dep in getReverseDependencies()) {
                 dep.dependencyInvalidated()
             }
         }
-
     }
 
-    inner class ExternalStateNode(key: IStateVariableReference<*>) : Node(key) {
+    inner class ExternalStateNode<E>(key: IStateVariableReference<E>) : Node(key) {
 
     }
 
     open inner class InternalStateNode<E>(override val key: InternalStateVariableReference<E>) : Node(key) {
         private var value: Optional<E> = Optional.empty()
-        fun getValue() = value
-        fun setValue(value: E) {
-            this.value = Optional.of(value)
-        }
-    }
-
-    inner class ComputationNode<E>(key: InternalStateVariableReference<E>) : InternalStateNode<E>(key) {
-        var lastException: Throwable? = null
-        private var state: ECacheEntryState = ECacheEntryState.NEW
-        var activeValidation: Deferred<E>? = null
-
         /**
          * if true, the engine will validate it directly after it got invalidated, without any external trigger
          */
         private var autoValidate: Boolean = false
-        fun getComputation(): IComputationDeclaration<E> = key.decl as IComputationDeclaration<E>
-        fun getState(): ECacheEntryState = state
+
         fun setAutoValidate(newValue: Boolean) {
             if (newValue == autoValidate) return
             autoValidate = newValue
@@ -147,6 +188,39 @@ class DependencyGraph(val engine: IncrementalEngine) {
             }
         }
         fun isAutoValidate() = autoValidate
+
+        fun getValue() = value
+        fun setValue(value: E) {
+            this.value = Optional.of(value)
+        }
+
+        override fun dependencyInvalidated() {
+            val wasValid = state == ECacheEntryState.VALID
+            state = ECacheEntryState.DEPENDENCY_INVALID
+            if (wasValid) {
+                super.dependencyInvalidated()
+                DependencyTracking.modified(key)
+                if (autoValidate) autoValidationChannel.trySend(key)
+            }
+        }
+
+        override fun invalidate() {
+            val wasValid = state == ECacheEntryState.VALID
+            state = ECacheEntryState.INVALID
+            if (wasValid) {
+                super.invalidate()
+                DependencyTracking.modified(key)
+                if (autoValidate) autoValidationChannel.trySend(key)
+            }
+        }
+    }
+
+    inner class ComputationNode<E>(key: InternalStateVariableReference<E>) : InternalStateNode<E>(key) {
+        var lastException: Throwable? = null
+        var activeValidation: Deferred<E>? = null
+
+        fun getComputation(): IComputationDeclaration<E> = key.decl as IComputationDeclaration<E>
+
         fun startValidation() {
             require(state != ECacheEntryState.VALIDATING) { "There is already an active validation for $key" }
             state = ECacheEntryState.VALIDATING
@@ -164,25 +238,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             setDependencies(this, newDependencies)
             state = ECacheEntryState.FAILED
         }
-        override fun dependencyInvalidated() {
-            val wasValid = getState() == ECacheEntryState.VALID
-            state = ECacheEntryState.DEPENDENCY_INVALID
-            if (wasValid) {
-                super.dependencyInvalidated()
-                DependencyTracking.modified(key)
-                if (autoValidate) autoValidationChannel.trySend(key)
-            }
-        }
 
-        override fun invalidate() {
-            val wasValid = getState() == ECacheEntryState.VALID
-            state = ECacheEntryState.INVALID
-            if (wasValid) {
-                super.invalidate()
-                DependencyTracking.modified(key)
-                if (autoValidate) autoValidationChannel.trySend(key)
-            }
-        }
     }
 }
 

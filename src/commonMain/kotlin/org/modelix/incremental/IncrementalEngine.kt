@@ -7,8 +7,9 @@ import kotlinx.coroutines.sync.withLock
 import kotlin.collections.HashSet
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
+import kotlin.math.max
 
-class IncrementalEngine : IIncrementalEngine, IStateVariableGroup, IDependencyListener {
+class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IStateVariableGroup, IDependencyListener {
 
     private val graph = DependencyGraph(this)
     private val dispatcher = Dispatchers.Default
@@ -59,7 +60,7 @@ class IncrementalEngine : IIncrementalEngine, IStateVariableGroup, IDependencyLi
             node_ = graph.getOrAddNode(engineValueKey) as DependencyGraph.InternalStateNode<T>
             val node = node_
             if (node is DependencyGraph.ComputationNode) {
-                state = node.getState()
+                state = node.state
                 when (state) {
                     ECacheEntryState.VALID -> {
                         value = node.getValue().getValue()
@@ -68,6 +69,9 @@ class IncrementalEngine : IIncrementalEngine, IStateVariableGroup, IDependencyLi
                         exception = node.lastException
                     }
                     else -> {
+                        if (graph.getSize() >= maxSize) {
+                            graph.shrinkGraph(maxSize - maxSize / 10)
+                        }
                         val decl = engineValueKey.decl
                         if (decl is IComputationDeclaration) {
                             evaluation = Evaluation(engineValueKey, decl, kotlin.coroutines.coroutineContext[Evaluation])
