@@ -93,7 +93,7 @@ benchmark {
             iterations = 10
             iterationTime = 1
             outputTimeUnit = "s"
-            //reportFormat = "text"
+            reportFormat = "text"
             include("RecursiveSum")
             exclude("RecursiveSumLarge")
             exclude("RecursiveSumNonIncremental")
