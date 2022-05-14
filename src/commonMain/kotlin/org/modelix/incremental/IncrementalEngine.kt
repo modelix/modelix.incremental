@@ -2,6 +2,7 @@ package org.modelix.incremental
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.*
+import kotlinx.coroutines.internal.synchronized
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.collections.HashSet
@@ -15,9 +16,7 @@ class IncrementalEngine(var maxSize: Int = 100_000, var maxActiveValidations: In
     private var activeEvaluation: Evaluation? = null
     private var autoValidator: Job? = null
     private var disposed = false
-    private val pendingModifications: Channel<IStateVariableReference<*>> = Channel(capacity = Channel.UNLIMITED)
     private val engineScope = CoroutineScope(Dispatchers.Default)
-    private val autoValidationsMutex = Mutex()
 
     init {
         DependencyTracking.registerListener(this)
@@ -51,7 +50,6 @@ class IncrementalEngine(var maxSize: Int = 100_000, var maxActiveValidations: In
         var state: ECacheEntryState = ECacheEntryState.NEW
         val node: DependencyGraph.InternalStateNode<T>
         var evaluation: Evaluation? = null
-        processPendingModifications()
 
         node = graph.getOrAddNode(engineValueKey) as DependencyGraph.InternalStateNode<T>
         state = node.state
@@ -105,27 +103,14 @@ class IncrementalEngine(var maxSize: Int = 100_000, var maxActiveValidations: In
         }
     }
 
-    override suspend fun <T> activate(call: IncrementalFunctionCall<T>): IActiveOutput<T> {
+    @Synchronized
+    override fun <T> activate(call: IncrementalFunctionCall<T>): IActiveOutput<T> {
         checkDisposed()
         if (autoValidator == null) {
             autoValidator = engineScope.launch {
-                launch {
-                    while (!disposed) {
-                        autoValidationsMutex.withLock {
-                            var key = graph.autoValidationChannel.tryReceive()
-                            while (key.isSuccess) {
-                                update(key.getOrThrow())
-                                key = graph.autoValidationChannel.tryReceive()
-                            }
-                        }
-                        delay(10)
-                    }
-                }
-                launch {
-                    while (!disposed) {
-                        processPendingModifications()
-                        delay(10)
-                    }
+                while (!disposed) {
+                    val key = graph.autoValidationChannel.receive()
+                    update(key)
                 }
             }
         }
@@ -133,7 +118,7 @@ class IncrementalEngine(var maxSize: Int = 100_000, var maxActiveValidations: In
         val key = InternalStateVariableReference(this@IncrementalEngine, call)
         val node = graph.getOrAddNode(key) as DependencyGraph.ComputationNode<T>
         node.setAutoValidate(true)
-        graph.autoValidationChannel.send(key)
+        graph.autoValidationChannel.trySend(key)
         return ObservedOutput<T>(key)
     }
 
@@ -143,24 +128,15 @@ class IncrementalEngine(var maxSize: Int = 100_000, var maxActiveValidations: In
     }
 
     @Synchronized
-    private fun processPendingModifications() {
-        var modification = pendingModifications.tryReceive()
-        while (modification.isSuccess) {
-            val key = modification.getOrThrow()
-            for (group in key.iterateGroups()) {
-                val node = graph.getNode(group)
-                if (node != null) {
-                    node.invalidate()
-                    break
-                }
-            }
-            modification = pendingModifications.tryReceive()
-        }
-    }
-
     override fun modified(key: IStateVariableReference<*>) {
         if (key is InternalStateVariableReference<*> && key.engine == this) return
-        pendingModifications.trySend(key).onFailure { if (it != null) throw it }
+        for (group in key.iterateGroups()) {
+            val node = graph.getNode(group)
+            if (node != null) {
+                node.invalidate()
+                break
+            }
+        }
     }
 
     override fun parentGroupChanged(childGroup: IStateVariableGroup) {
@@ -178,20 +154,11 @@ class IncrementalEngine(var maxSize: Int = 100_000, var maxActiveValidations: In
         return null
     }
 
-    override suspend fun flush() {
+    @Synchronized
+    override fun flush() {
         checkDisposed()
-        processPendingModifications()
-        coroutineScope {
-            autoValidationsMutex.withLock {
-                var autoValidation = graph.autoValidationChannel.tryReceive()
-                while (autoValidation.isSuccess) {
-                    val key = autoValidation.getOrThrow()
-                    launch { // engineScope is not used because flush should wait for the update calls
-                        update(key)
-                    }
-                    autoValidation = graph.autoValidationChannel.tryReceive()
-                }
-            }
+        for (autoValidation in graph.autoValidations.filter { it.state != ECacheEntryState.VALID }) {
+            update(autoValidation.key)
         }
     }
 
@@ -256,11 +223,16 @@ class IncrementalEngine(var maxSize: Int = 100_000, var maxActiveValidations: In
         }
     }
 
+    @Synchronized
+    private fun setAutoValidate(key: IStateVariableReference<*>, value: Boolean) {
+        val node = (graph.getNode(key) ?: return) as DependencyGraph.ComputationNode<*>
+        // TODO there could be multiple instances for the same key
+        node.setAutoValidate(value)
+    }
+
     private inner class ObservedOutput<E>(val key: IStateVariableReference<E>) : IActiveOutput<E> {
-        override suspend fun deactivate() {
-            val node = (graph.getNode(key) ?: return) as DependencyGraph.ComputationNode<E>
-            // TODO there could be multiple instances for the same key
-            node.setAutoValidate(false)
+        override fun deactivate() {
+            setAutoValidate(key, false)
         }
 
         protected fun finalize() {
