@@ -94,7 +94,7 @@ class IncrementalMathTest {
     @Test
     fun cycleDetection() = runTestAndCleanup {
         val a = TrackableValue(5)
-        var b: (suspend ()->Int)? = null
+        var b: (()->Int)? = null
         val c = engine.incrementalFunction<Int>("c") {
             b!!() / 2
         }

@@ -1,5 +1,5 @@
 package org.modelix.incremental
 
 interface IComputationDeclaration<E> : IStateVariableDeclaration<E> {
-    suspend fun invoke(context: IIncrementalFunctionContext<E>): E
+    fun invoke(context: IIncrementalFunctionContext<E>): E
 }

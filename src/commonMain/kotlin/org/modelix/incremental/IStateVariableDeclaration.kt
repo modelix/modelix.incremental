@@ -22,7 +22,7 @@ interface IInternalStateVariableReference<E> : IStateVariableReference<E>
 data class InternalStateVariableReference<E>(val engine: IIncrementalEngine, val decl: IStateVariableDeclaration<E>) : IInternalStateVariableReference<E> {
     override fun getGroup(): IStateVariableGroup? = null
 
-    override suspend fun read(): E {
+    override fun read(): E {
         return engine.readStateVariable(decl)
     }
 }

@@ -19,7 +19,7 @@ data class ListRangeDependency(val list: TrackableList<*>, val index: Int, val l
         return ListRangeDependency(list, index / 2, level + 1)
     }
 
-    override suspend fun read(): Any? {
+    override fun read(): Any? {
         TODO("Not yet implemented")
     }
 

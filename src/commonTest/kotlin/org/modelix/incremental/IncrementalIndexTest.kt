@@ -29,7 +29,7 @@ class IncrementalIndexTest {
     @Test
     fun test() = runTestAndCleanup {
         val input = TrackableList((5000..6000).toMutableList())
-        var buildIndex: (suspend (Int, Int) -> IncrementalList<Pair<Int, Int>>)? = null
+        var buildIndex: ((Int, Int) -> IncrementalList<Pair<Int, Int>>)? = null
         buildIndex =
             engine.incrementalFunction<IncrementalList<Pair<Int, Int>>, Int, Int>("buildIndex") { context, firstIndex, lastIndex ->
                 invocationCount++

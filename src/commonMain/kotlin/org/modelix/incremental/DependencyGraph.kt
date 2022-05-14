@@ -316,7 +316,6 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
     inner class ComputationNode<E>(key: InternalStateVariableReference<E>) : InternalStateNode<E>(key) {
         var lastException: Throwable? = null
-        var activeValidation: Deferred<E>? = null
 
         override fun toString(): String = "computation[${key.decl}]"
 

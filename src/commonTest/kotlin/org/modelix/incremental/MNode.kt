@@ -6,7 +6,7 @@ class MNode(val type: String, var role: String? = null) : IStateVariableReferenc
     private val properties: MutableMap<String, String> = HashMap()
     private val references: MutableMap<String, MNode> = HashMap()
 
-    override suspend fun read(): MNode = this
+    override fun read(): MNode = this
 
     fun getChildren(role: String): List<MNode> {
         DependencyTracking.accessed(ChildrenDependency(this, role))
@@ -45,13 +45,13 @@ class MNode(val type: String, var role: String? = null) : IStateVariableReferenc
 
 data class PropertyDependency(val node: MNode, val role: String) : IStateVariableReference<String?> {
     override fun getGroup() = node
-    override suspend fun read(): String? = node.getProperty(role)
+    override fun read(): String? = node.getProperty(role)
 }
 data class ChildrenDependency(val node: MNode, val role: String) : IStateVariableReference<List<MNode>> {
     override fun getGroup() = node
-    override suspend fun read(): List<MNode> = node.getChildren(role)
+    override fun read(): List<MNode> = node.getChildren(role)
 }
 data class AllChildrenDependency(val node: MNode) : IStateVariableReference<List<MNode>> {
     override fun getGroup() = node
-    override suspend fun read(): List<MNode> = node.getAllChildren()
+    override fun read(): List<MNode> = node.getAllChildren()
 }
