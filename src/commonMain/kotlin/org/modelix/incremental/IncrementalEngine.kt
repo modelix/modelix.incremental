@@ -8,7 +8,7 @@ import kotlin.collections.HashSet
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 
-class IncrementalEngine(var maxSize: Int = 100_000, var maxActiveValidations: Int = 1000) : IIncrementalEngine, IStateVariableGroup, IDependencyListener {
+class IncrementalEngine(var maxSize: Int = 100_000, var maxActiveValidations: Int = (maxSize / 100).coerceAtMost(100)) : IIncrementalEngine, IStateVariableGroup, IDependencyListener {
 
     private val graph = DependencyGraph(this)
     private val dispatcher = Dispatchers.Default
@@ -24,6 +24,8 @@ class IncrementalEngine(var maxSize: Int = 100_000, var maxActiveValidations: In
     init {
         DependencyTracking.registerListener(this)
     }
+
+    fun getGraphSize() = graph.getSize()
 
     private fun checkDisposed() {
         if (disposed) throw IllegalStateException("engine is disposed")
@@ -77,7 +79,8 @@ class IncrementalEngine(var maxSize: Int = 100_000, var maxActiveValidations: In
                         }
                         else -> {
                             if (graph.getSize() >= maxSize) {
-                                graph.shrinkGraph(maxSize - maxSize / 10)
+                                graph.shrinkGraph(maxSize - maxSize / 20)
+                                //graph.shrinkGraph(maxSize - 1)
                             }
                             val decl = engineValueKey.decl
                             if (decl is IComputationDeclaration) {

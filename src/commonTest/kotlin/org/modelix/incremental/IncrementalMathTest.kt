@@ -180,6 +180,7 @@ class IncrementalMathTest {
         println("Initial: " + measureTime {
             assertEquals(500500L, engine.readStateVariable(sum!!(0, input.size() - 1)))
         })
+        println("Graph Size: " + engine.getGraphSize())
         input.set(10, input.get(10) + 13)
         input.set(145, input.get(145) + 7)
         input.set(765, input.get(765) + 23)
@@ -187,7 +188,7 @@ class IncrementalMathTest {
             assertEquals(500500L + 13 + 7 + 23, engine.readStateVariable(sum!!(0, input.size() - 1)))
         })
         println("Non-incremental: " + measureTime {
-            assertEquals(500500L + 13 + 7 + 23, input.asSequence().fold(0L) { acc, l -> acc + l })
+            assertEquals(500500L + 13 + 7 + 23, input.asSequence().sum())
         })
     }
 

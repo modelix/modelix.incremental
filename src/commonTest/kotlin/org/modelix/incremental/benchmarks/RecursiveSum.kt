@@ -32,7 +32,7 @@ abstract class RecursiveSum(val graphSize: Int) {
 
     @Setup
     fun before() {
-        engine = IncrementalEngine(maxSize = graphSize, maxActiveValidations = 100)
+        engine = IncrementalEngine(maxSize = graphSize, maxActiveValidations = 1)
         rand = Random(12345)
     }
 

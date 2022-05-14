@@ -2,6 +2,7 @@ package org.modelix.incremental
 
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.channels.Channel
+import kotlin.math.max
 
 /**
  * Not thread-safe.
@@ -10,30 +11,34 @@ class DependencyGraph(val engine: IncrementalEngine) {
     val autoValidationChannel: Channel<InternalStateVariableReference<*>> = Channel(capacity = Channel.UNLIMITED)
     val autoValidations: MutableSet<InternalStateNode<*>> = HashSet()
     private val nodes: MutableMap<IStateVariableGroup, Node> = HashMap()
-    private val lru = LinkedHashSet<Node>()
+    private val lru = LinkedHashSet<InternalStateNode<*>>()
     private val clock = VirtualClock()
 
     fun getSize() = nodes.size
 
     fun shrinkGraph(targetSize: Int) {
-        if (lru.isEmpty()) return
+        val oldSize = getSize()
         val itr = lru.iterator()
         for (n1 in itr) {
             if (nodes.size <= targetSize) break
+            //if (nodes.size <= oldSize - 1) break
             if (n1.state == ECacheEntryState.VALIDATING || n1.state == ECacheEntryState.NEW) continue
             var removeNode = false
             when (n1) {
-                is ExternalStateGroupNode -> {
-                    val parentGroup = n1.getReverseDependencies()
-                        .filterIsInstance<ExternalStateGroupNode>().firstOrNull()
-                    if (parentGroup == null) continue
-                    if (n1.getDependencies().isNotEmpty()) continue
-                    for (n2 in n1.getReverseDependencies().toList()) {
-                        n2.removeDependency(n1)
-                        n2.addDependency(parentGroup)
-                    }
-                    removeNode = true
-                }
+//                is ExternalStateGroupNode -> {
+//                    if (n1.getReverseDependencies().any { it !is ExternalStateGroupNode }) {
+//                        // remove only if not directly referenced by any computation
+//                        continue
+//                    }
+//                    val parentGroup = n1.getParentGroup()
+//                    if (parentGroup == null) continue
+//                    if (n1.getDependencies().isNotEmpty()) continue
+//                    for (n2 in n1.getReverseDependencies().toList()) {
+//                        n2.removeDependency(n1)
+//                        n2.addDependency(parentGroup)
+//                    }
+//                    removeNode = true
+//                }
                 is InternalStateNode<*> -> {
                     if (n1.isAutoValidate()) continue
                     // replace n2->n1->n0 with n2->n0
@@ -44,6 +49,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
                     for (n2 in n1.getReverseDependencies().toList()) {
                         n2.removeDependency(n1)
                         dependencies.forEach { n0 -> n2.addDependency(n0) }
+                        if (n2 is InternalStateNode<*>) n2.shrinkDependencies()
                         //println("Merged $n1 into $n2")
                     }
                     removeNode = true
@@ -55,9 +61,11 @@ class DependencyGraph(val engine: IncrementalEngine) {
                 require(n1.getReverseDependencies().isEmpty()) { "$n1 still has reverse dependencies" }
                 nodes.remove(n1.key)
                 itr.remove()
-                //println("Removed ${n1.key}")
+                //println("Removed (${n1.transitiveDependenciesCount}) ${n1.key}")
             }
         }
+
+        //println("shrink $oldSize -> ${getSize()}")
     }
 
     fun getNode(key: IStateVariableGroup): Node? = nodes[key]
@@ -83,6 +91,10 @@ class DependencyGraph(val engine: IncrementalEngine) {
                 val parentNode = getOrAddNodeAndGroups(parentGroup)
                 parentNode.addDependency(node)
             }
+        }
+        if (node is InternalStateNode<*> && lru.contains(node)) {
+            lru.remove(node)
+            lru.add(node)
         }
         return node
     }
@@ -112,6 +124,9 @@ class DependencyGraph(val engine: IncrementalEngine) {
         for (dep in addedDeps) {
             fromNode.addDependency(getOrAddNodeAndGroups(dep))
         }
+        if (fromNode is InternalStateNode<*>) {
+            fromNode.shrinkDependencies()
+        }
     }
 
     fun addDependency(from: IStateVariableReference<*>, to: IStateVariableReference<*>) {
@@ -134,8 +149,10 @@ class DependencyGraph(val engine: IncrementalEngine) {
                 field = newState
                 if (newState == ECacheEntryState.VALID) {
                     lastValidation = clock.getTime()
-                    lru.remove(this)
-                    lru.add(this)
+                    if (this is InternalStateNode<*>) {
+                        lru.remove(this)
+                        lru.add(this)
+                    }
                 }
                 if (previousState == ECacheEntryState.VALID) {
                     //println("Invalidated: $key")
@@ -144,14 +161,14 @@ class DependencyGraph(val engine: IncrementalEngine) {
         private var lastValidation: Long = 0L
         private val reverseDependencies: MutableSet<Node> = HashSet()
         private val dependencies: MutableSet<Node> = HashSet()
-        var transitiveDependenciesCount: Int = 0 // monotonic growth is intended
+        var transitiveDependenciesCount: Int = 1 // monotonic growth is intended
 
         fun addDependency(dependency: Node) {
             if (dependency == this) return
             require(nodes.containsKey(dependency.key)) { "Not part of the graph: $dependency" }
             dependencies += dependency
             dependency.addReverseDependency(this)
-            transitiveDependenciesCount = dependencies.fold(0) { acc, d -> acc + d.transitiveDependenciesCount }
+            transitiveDependenciesCount = max(transitiveDependenciesCount, dependencies.fold(1) { acc, d -> acc + d.transitiveDependenciesCount })
         }
 
         fun removeDependency(dependency: Node) {
@@ -168,11 +185,11 @@ class DependencyGraph(val engine: IncrementalEngine) {
             }
             return result
         }
-        fun addReverseDependency(dependency: Node) {
+        open fun addReverseDependency(dependency: Node) {
             reverseDependencies += dependency
         }
 
-        fun removeReverseDependency(dependency: Node) {
+        open fun removeReverseDependency(dependency: Node) {
             reverseDependencies -= dependency
         }
 
@@ -198,12 +215,40 @@ class DependencyGraph(val engine: IncrementalEngine) {
     }
 
     open inner class ExternalStateGroupNode(key: IStateVariableGroup) : Node(key) {
+        private var parentGroup: ExternalStateGroupNode? = null
         override fun toString(): String = "group[$key]"
 
         fun accessed() {
             if (state == ECacheEntryState.VALID) return
             state = ECacheEntryState.VALID
             getReverseDependencies().filterIsInstance<ExternalStateGroupNode>().forEach { it.accessed() }
+        }
+
+        fun getParentGroup(): ExternalStateGroupNode? {
+            return parentGroup
+        }
+
+        override fun addReverseDependency(dependency: Node) {
+            super.addReverseDependency(dependency)
+            if (dependency is ExternalStateGroupNode) {
+                parentGroup = dependency
+            }
+        }
+
+        override fun removeReverseDependency(dependency: Node) {
+            super.removeReverseDependency(dependency)
+            if (dependency == parentGroup) {
+                parentGroup = null
+            }
+        }
+
+        fun removeIfUnused() {
+            if (parentGroup == null) return
+            if (getReverseDependencies().size != 1) return
+            if (getReverseDependencies().first() != parentGroup) return
+            if (getDependencies().isNotEmpty()) return
+            parentGroup!!.removeDependency(this)
+            nodes.remove(key)
         }
     }
 
@@ -254,6 +299,18 @@ class DependencyGraph(val engine: IncrementalEngine) {
                 DependencyTracking.modified(key)
                 if (autoValidate) autoValidationChannel.trySend(key)
             }
+        }
+
+        fun shrinkDependencies() {
+            if (getDependencies().size < 5) return
+            getDependencies().filterIsInstance<ExternalStateGroupNode>()
+                .groupBy { it.getParentGroup() }
+                .filter { it.key != null && it.value.size >= 2 }
+                .forEach {
+                    it.value.forEach { removeDependency(it) }
+                    addDependency(it.key!!)
+                    it.value.forEach { it.removeIfUnused() }
+                }
         }
     }
 
