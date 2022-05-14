@@ -1,6 +1,6 @@
 Benchmark                        Mode  Cnt      Score      Error  Units
-RecursiveSum10000.incremental   thrpt   10   7032,848 ± 5654,416  ops/s
-RecursiveSum100000.incremental  thrpt   10  21548,215 ± 8423,419  ops/s
-RecursiveSum1250.incremental    thrpt   10   6732,396 ± 3028,028  ops/s
-RecursiveSum2500.incremental    thrpt   10   7273,508 ± 2801,319  ops/s
-RecursiveSum5000.incremental    thrpt   10   7678,835 ± 4273,949  ops/s
+RecursiveSum10000.incremental   thrpt   10   9912,308 ± 5978,708  ops/s
+RecursiveSum100000.incremental  thrpt   10  15022,921 ± 8337,348  ops/s
+RecursiveSum1250.incremental    thrpt   10   5276,533 ± 2343,789  ops/s
+RecursiveSum2500.incremental    thrpt   10   6181,162 ± 3363,099  ops/s
+RecursiveSum5000.incremental    thrpt   10   6875,611 ± 4009,834  ops/s

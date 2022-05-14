@@ -11,62 +11,36 @@ class DependencyGraph(val engine: IncrementalEngine) {
     val autoValidationChannel: Channel<InternalStateVariableReference<*>> = Channel(capacity = Channel.UNLIMITED)
     val autoValidations: MutableSet<InternalStateNode<*>> = HashSet()
     private val nodes: MutableMap<IStateVariableGroup, Node> = HashMap()
-    private val lru = LinkedHashSet<InternalStateNode<*>>()
     private val clock = VirtualClock()
+    private val lru = object : SLRUMap<IStateVariableGroup, InternalStateNode<*>>(engine.maxSize / 2, engine.maxSize / 2) {
+        override fun evicted(key: IStateVariableGroup, value: InternalStateNode<*>) {
+            if (value.state == ECacheEntryState.VALIDATING || value.state == ECacheEntryState.NEW) {
+                // will be added back soon
+                return
+            }
+            tryRemoveNode(value)
+        }
+    }
 
     fun getSize() = nodes.size
 
-    fun shrinkGraph(targetSize: Int) {
-        val oldSize = getSize()
-        val itr = lru.iterator()
-        for (n1 in itr) {
-            if (nodes.size <= targetSize) break
-            //if (nodes.size <= oldSize - 1) break
-            if (n1.state == ECacheEntryState.VALIDATING || n1.state == ECacheEntryState.NEW) continue
-            var removeNode = false
-            when (n1) {
-//                is ExternalStateGroupNode -> {
-//                    if (n1.getReverseDependencies().any { it !is ExternalStateGroupNode }) {
-//                        // remove only if not directly referenced by any computation
-//                        continue
-//                    }
-//                    val parentGroup = n1.getParentGroup()
-//                    if (parentGroup == null) continue
-//                    if (n1.getDependencies().isNotEmpty()) continue
-//                    for (n2 in n1.getReverseDependencies().toList()) {
-//                        n2.removeDependency(n1)
-//                        n2.addDependency(parentGroup)
-//                    }
-//                    removeNode = true
-//                }
-                is InternalStateNode<*> -> {
-                    if (n1.isAutoValidate()) continue
-                    // replace n2->n1->n0 with n2->n0
-                    val dependencies = n1.getDependencies().toList()
-                    if (dependencies.any { it.state == ECacheEntryState.VALIDATING }) continue
-                    if (n1.getReverseDependencies().any { it.state == ECacheEntryState.VALIDATING }) continue
-                    dependencies.forEach { n0 -> n1.removeDependency(n0) }
-                    val reverseDependencies = n1.getReverseDependencies().toList()
-                    for (n2 in reverseDependencies) {
-                        n2.removeDependency(n1)
-                        dependencies.forEach { n0 -> n2.addDependency(n0) }
-                        //println("Merged $n1 into $n2")
-                    }
-                    reverseDependencies.filterIsInstance<InternalStateNode<*>>().forEach { it.shrinkDependencies() }
-                    removeNode = true
-                }
-                else -> throw RuntimeException("Unknown node type: " + n1::class)
-            }
-            if (removeNode) {
-                require(n1.getDependencies().isEmpty()) { "$n1 still has dependencies" }
-                require(n1.getReverseDependencies().isEmpty()) { "$n1 still has reverse dependencies" }
-                nodes.remove(n1.key)
-                itr.remove()
-                //println("Removed (${n1.transitiveDependenciesCount}) ${n1.key}")
-            }
+    private fun tryRemoveNode(n1: InternalStateNode<*>) {
+        if (n1.isAutoValidate()) return
+        // replace n2->n1->n0 with n2->n0
+        val dependencies = n1.getDependencies().toList()
+        //if (dependencies.any { it.state == ECacheEntryState.VALIDATING }) return
+        if (n1.getReverseDependencies().any { it.state == ECacheEntryState.VALIDATING }) return
+        dependencies.forEach { n0 -> n1.removeDependency(n0) }
+        val reverseDependencies = n1.getReverseDependencies().toList()
+        for (n2 in reverseDependencies) {
+            n2.removeDependency(n1)
+            dependencies.forEach { n0 -> n2.addDependency(n0) }
+            //println("Merged $n1 into $n2")
         }
-
-        //println("shrink $oldSize -> ${getSize()}")
+        reverseDependencies.filterIsInstance<InternalStateNode<*>>().forEach { it.shrinkDependencies() }
+        require(n1.getDependencies().isEmpty()) { "$n1 still has dependencies" }
+        require(n1.getReverseDependencies().isEmpty()) { "$n1 still has reverse dependencies" }
+        nodes.remove(n1.key)
     }
 
     fun getNode(key: IStateVariableGroup): Node? = nodes[key]
@@ -93,9 +67,10 @@ class DependencyGraph(val engine: IncrementalEngine) {
                 parentNode.addDependency(node)
             }
         }
-        if (node is InternalStateNode<*> && lru.contains(node)) {
-            lru.remove(node)
-            lru.add(node)
+        if (node is InternalStateNode<*>) {
+            if (lru[key] == null) { // the get access here is important to move the entry to the MRU end of the queue
+                lru[key] = node
+            }
         }
         return node
     }
@@ -151,8 +126,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
                 if (newState == ECacheEntryState.VALID) {
                     lastValidation = clock.getTime()
                     if (this is InternalStateNode<*>) {
-                        lru.remove(this)
-                        lru.add(this)
+                        //lru[key] // get access to move then entry to the MRU end of the queue
                     }
                 }
                 if (previousState == ECacheEntryState.VALID) {

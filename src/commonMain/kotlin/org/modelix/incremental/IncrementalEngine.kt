@@ -10,7 +10,7 @@ import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 import kotlin.jvm.Synchronized
 
-class IncrementalEngine(var maxSize: Int = 100_000, var maxActiveValidations: Int = (maxSize / 100).coerceAtMost(100)) : IIncrementalEngine, IStateVariableGroup, IDependencyListener {
+class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IStateVariableGroup, IDependencyListener {
 
     private val graph = DependencyGraph(this)
     private var activeEvaluation: Evaluation? = null
@@ -62,10 +62,6 @@ class IncrementalEngine(var maxSize: Int = 100_000, var maxActiveValidations: In
             }
             else -> {
                 if (node is DependencyGraph.ComputationNode) {
-                    if (graph.getSize() >= maxSize) {
-                        graph.shrinkGraph(maxSize - maxSize / 20)
-                        //graph.shrinkGraph(maxSize - 1)
-                    }
                     val decl = engineValueKey.decl
                     if (decl is IComputationDeclaration) {
                         evaluation = Evaluation(engineValueKey, decl, activeEvaluation)

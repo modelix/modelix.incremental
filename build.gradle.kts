@@ -81,11 +81,11 @@ benchmark {
     configurations {
         named("main") {
             warmups = 4
-            iterations = 5
+            iterations = 10
             iterationTime = 1
             outputTimeUnit = "s"
             //mode = "avgt"
-            //reportFormat = "text"
+            reportFormat = "text"
             include(".*")
         }
         create("sum") {
