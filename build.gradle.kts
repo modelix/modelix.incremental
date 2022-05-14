@@ -17,7 +17,7 @@ kotlin {
     *  https://kotlinlang.org/docs/reference/building-mpp-with-gradle.html#setting-up-targets */
 
     jvm()
-    js(IR) {
+    js() {
         //browser {}
         nodejs {
             testTask {
