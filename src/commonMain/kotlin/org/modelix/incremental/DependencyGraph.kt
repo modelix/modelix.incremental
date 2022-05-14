@@ -46,12 +46,13 @@ class DependencyGraph(val engine: IncrementalEngine) {
                     if (dependencies.any { it.state == ECacheEntryState.VALIDATING }) continue
                     if (n1.getReverseDependencies().any { it.state == ECacheEntryState.VALIDATING }) continue
                     dependencies.forEach { n0 -> n1.removeDependency(n0) }
-                    for (n2 in n1.getReverseDependencies().toList()) {
+                    val reverseDependencies = n1.getReverseDependencies().toList()
+                    for (n2 in reverseDependencies) {
                         n2.removeDependency(n1)
                         dependencies.forEach { n0 -> n2.addDependency(n0) }
-                        if (n2 is InternalStateNode<*>) n2.shrinkDependencies()
                         //println("Merged $n1 into $n2")
                     }
+                    reverseDependencies.filterIsInstance<InternalStateNode<*>>().forEach { it.shrinkDependencies() }
                     removeNode = true
                 }
                 else -> throw RuntimeException("Unknown node type: " + n1::class)
@@ -161,14 +162,12 @@ class DependencyGraph(val engine: IncrementalEngine) {
         private var lastValidation: Long = 0L
         private val reverseDependencies: MutableSet<Node> = HashSet()
         private val dependencies: MutableSet<Node> = HashSet()
-        var transitiveDependenciesCount: Int = 1 // monotonic growth is intended
 
         fun addDependency(dependency: Node) {
             if (dependency == this) return
             require(nodes.containsKey(dependency.key)) { "Not part of the graph: $dependency" }
             dependencies += dependency
             dependency.addReverseDependency(this)
-            transitiveDependenciesCount = max(transitiveDependenciesCount, dependencies.fold(1) { acc, d -> acc + d.transitiveDependenciesCount })
         }
 
         fun removeDependency(dependency: Node) {
