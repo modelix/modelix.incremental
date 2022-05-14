@@ -45,7 +45,10 @@ abstract class RecursiveSum(val graphSize: Int) {
     fun incremental() = runTest {
         input.set(modificationIndex, input.get(modificationIndex) + 1)
         expectedResult++
-        modificationIndex = (modificationIndex + rand.nextInt(-100, 130) + input.size()) % input.size()
+        // This simulates local changes, but still moves across the whole input.
+        // This is similar to how you would edit a model, a lot of local changes at one place and then a lot of changes
+        // somewhere else.
+        modificationIndex = (modificationIndex + rand.nextInt(-5, 7) + input.size()) % input.size()
         val actualResult = engine.readStateVariable(sum!!(0, input.size() - 1))
         assertEquals(expectedResult, actualResult)
     }
