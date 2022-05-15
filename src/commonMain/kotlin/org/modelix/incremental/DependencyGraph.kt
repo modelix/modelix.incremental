@@ -307,6 +307,11 @@ class DependencyGraph(val engine: IncrementalEngine) {
                     it.value.forEach { it.removeIfUnused() }
                 }
         }
+
+        fun startValidation() {
+            require(state != ECacheEntryState.VALIDATING) { "There is already an active validation for $key" }
+            state = ECacheEntryState.VALIDATING
+        }
     }
 
     inner class ComputationNode<E>(key: InternalStateVariableReference<E, E>) : InternalStateNode<E, E>(key) {
@@ -316,10 +321,6 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
         fun getComputation(): IComputationDeclaration<E> = key.decl as IComputationDeclaration<E>
 
-        fun startValidation() {
-            require(state != ECacheEntryState.VALIDATING) { "There is already an active validation for $key" }
-            state = ECacheEntryState.VALIDATING
-        }
         fun validationSuccessful(newValue: E, newDependencies: Set<IStateVariableReference<*>>) {
             require(state == ECacheEntryState.VALIDATING) { "There is no active validation for $key" }
             writeValue(newValue, this)

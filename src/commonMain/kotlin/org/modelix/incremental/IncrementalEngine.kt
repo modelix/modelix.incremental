@@ -41,15 +41,9 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
     @Synchronized
     private fun <T> update(engineValueKey: InternalStateVariableReference<*, T>): T {
         checkDisposed()
-        var value: T? = null
-        var exception: Throwable? = null
-        var state: ECacheEntryState = ECacheEntryState.NEW
-        val node: DependencyGraph.InternalStateNode<*, T>
-        var evaluation: Evaluation? = null
 
-        node = graph.getOrAddNode(engineValueKey) as DependencyGraph.InternalStateNode<*, T>
-        state = node.state
-        when (state) {
+        val node = graph.getOrAddNode(engineValueKey) as DependencyGraph.InternalStateNode<*, T>
+        when (val state: ECacheEntryState = node.state) {
             ECacheEntryState.VALID -> {
                 return node.getValue().getValue()
             }
@@ -57,21 +51,21 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
                 throw (if (node is DependencyGraph.ComputationNode<*>) node.lastException else null) ?: RuntimeException()
             }
             else -> {
-                if (node is DependencyGraph.ComputationNode<*>) {
-                    val decl = engineValueKey.decl as IComputationDeclaration<*>
-                    evaluation = Evaluation(engineValueKey, decl, activeEvaluation)
-                    evaluation!!.detectCycle()
-                    try {
-                        activeEvaluation = evaluation
+                val decl = engineValueKey.decl
+                val evaluation = Evaluation(engineValueKey, activeEvaluation)
+                evaluation.detectCycle()
+                try {
+                    activeEvaluation = evaluation
 
-                        // This dependency has to be added here, because the node may be removed from the graph
-                        // before the parent finishes evaluation and then the transitive dependencies are lost.
-                        evaluation!!.parent?.let { graph.getOrAddNode(it.dependencyKey).addDependency(node) }
+                    // This dependency has to be added here, because the node may be removed from the graph
+                    // before the parent finishes evaluation and then the transitive dependencies are lost.
+                    evaluation.parent?.let { graph.getOrAddNode(it.dependencyKey).addDependency(node) }
 
-                        if (state == ECacheEntryState.VALIDATING) {
-                            TODO("shouldn't happen")
-                        } else {
-                            node.startValidation()
+                    if (state == ECacheEntryState.VALIDATING) {
+                        TODO("shouldn't happen")
+                    } else {
+                        node.startValidation()
+                        if (decl is IComputationDeclaration<*> && node is DependencyGraph.ComputationNode<*>) {
                             try {
                                 val value = (decl as IComputationDeclaration<T>).invoke(IncrementalFunctionContext(evaluation, node) as IIncrementalFunctionContext<T>)
                                 (node as DependencyGraph.ComputationNode<T>).validationSuccessful(value, evaluation.dependencies)
@@ -80,21 +74,26 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
                                 node.validationFailed(e, evaluation.dependencies)
                                 throw e
                             }
+                        } else {
+                            try {
+                                val earlierWriters = node.getDependencies()
+                                    .filterIsInstance<DependencyGraph.ComputationNode<*>>()
+                                    .filter { it.state != ECacheEntryState.VALID }
+                                for (earlierWriter in earlierWriters) {
+                                    node.removeDependency(earlierWriter)
+                                    update(earlierWriter.key)
+                                }
+                                //TODO("run triggers")
+                                node.state = ECacheEntryState.VALID
+                                return node.readValue()
+                            } catch (e : Throwable) {
+                                node.state = ECacheEntryState.FAILED
+                                throw e
+                            }
                         }
-                    } finally {
-                        activeEvaluation = evaluation.parent
                     }
-                } else {
-                    val earlierWriters = node.getDependencies()
-                        .filterIsInstance<DependencyGraph.ComputationNode<*>>()
-                        .filter { it.state != ECacheEntryState.VALID }
-                    for (earlierWriter in earlierWriters) {
-                        node.removeDependency(earlierWriter)
-                        update(earlierWriter.key)
-                    }
-                    //TODO("run triggers")
-                    node.state = ECacheEntryState.VALID
-                    return node.readValue()
+                } finally {
+                    activeEvaluation = evaluation.parent
                 }
             }
         }
@@ -194,8 +193,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
     }
 
     private class Evaluation(
-        val dependencyKey: IStateVariableReference<*>,
-        val call: IComputationDeclaration<*>,
+        val dependencyKey: InternalStateVariableReference<*, *>,
         val parent: Evaluation?,
     ) : AbstractCoroutineContextElement(Evaluation) {
         companion object Key : CoroutineContext.Key<Evaluation>
@@ -214,7 +212,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
                     val activeEvaluations = parent!!.getEvaluations()
                     val cycleStart = activeEvaluations.indexOfLast { it.dependencyKey == dependencyKey }
                     if (cycleStart != -1) {
-                        throw DependencyCycleException(activeEvaluations.drop(cycleStart).map { it.call })
+                        throw DependencyCycleException(activeEvaluations.drop(cycleStart).map { it.dependencyKey.decl })
                     }
                 }
                 current = current.parent
