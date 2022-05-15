@@ -64,6 +64,9 @@ abstract class IncrementalFunctionCall<RetT>() : IComputationDeclaration<RetT> {
      */
     abstract override fun invoke(context: IIncrementalFunctionContext<RetT>): RetT
     fun bind(engine: IIncrementalEngine): () -> RetT = { engine.readStateVariable(this) }
+    override fun reduce(inputValues: Iterable<RetT>): RetT {
+        return inputValues.first()
+    }
 }
 data class IncrementalFunctionCall0<RetT>(
     val function: IncrementalFunctionImplementation0<RetT>,
@@ -72,6 +75,7 @@ data class IncrementalFunctionCall0<RetT>(
     override fun toString(): String {
         return "${function.name}()"
     }
+
 }
 data class IncrementalFunctionCall1<RetT, P1>(
     val function: IncrementalFunctionImplementation1<RetT, P1>,

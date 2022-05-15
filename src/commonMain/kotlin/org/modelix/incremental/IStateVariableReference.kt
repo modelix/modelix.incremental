@@ -1,5 +1,5 @@
 package org.modelix.incremental
 
-interface IStateVariableReference<E> : IStateVariableGroup {
+interface IStateVariableReference<out E> : IStateVariableGroup {
     fun read(): E
 }

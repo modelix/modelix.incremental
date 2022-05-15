@@ -8,12 +8,12 @@ import kotlin.math.max
  * Not thread-safe.
  */
 class DependencyGraph(val engine: IncrementalEngine) {
-    val autoValidationChannel: Channel<InternalStateVariableReference<*>> = Channel(capacity = Channel.UNLIMITED)
-    val autoValidations: MutableSet<InternalStateNode<*>> = HashSet()
+    val autoValidationChannel: Channel<InternalStateVariableReference<*, *>> = Channel(capacity = Channel.UNLIMITED)
+    val autoValidations: MutableSet<InternalStateNode<*, *>> = HashSet()
     private val nodes: MutableMap<IStateVariableGroup, Node> = HashMap()
     private val clock = VirtualClock()
-    private val lru = object : SLRUMap<IStateVariableGroup, InternalStateNode<*>>(engine.maxSize / 2, engine.maxSize / 2) {
-        override fun evicted(key: IStateVariableGroup, value: InternalStateNode<*>) {
+    private val lru = object : SLRUMap<IStateVariableGroup, InternalStateNode<*, *>>(engine.maxSize / 2, engine.maxSize / 2) {
+        override fun evicted(key: IStateVariableGroup, value: InternalStateNode<*, *>) {
             if (value.state == ECacheEntryState.VALIDATING || value.state == ECacheEntryState.NEW) {
                 // will be added back soon
                 return
@@ -24,7 +24,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
     fun getSize() = nodes.size
 
-    private fun tryRemoveNode(n1: InternalStateNode<*>) {
+    private fun tryRemoveNode(n1: InternalStateNode<*, *>) {
         if (n1.isAutoValidate()) return
         // replace n2->n1->n0 with n2->n0
         val dependencies = n1.getDependencies().toList()
@@ -37,7 +37,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             dependencies.forEach { n0 -> n2.addDependency(n0) }
             //println("Merged $n1 into $n2")
         }
-        reverseDependencies.filterIsInstance<InternalStateNode<*>>().forEach { it.shrinkDependencies() }
+        reverseDependencies.filterIsInstance<InternalStateNode<*, *>>().forEach { it.shrinkDependencies() }
         require(n1.getDependencies().isEmpty()) { "$n1 still has dependencies" }
         require(n1.getReverseDependencies().isEmpty()) { "$n1 still has reverse dependencies" }
         nodes.remove(n1.key)
@@ -51,9 +51,9 @@ class DependencyGraph(val engine: IncrementalEngine) {
         var node = nodes[key]
         if (node == null) {
             var parentGroup: IStateVariableGroup? = null
-            node = if (key is InternalStateVariableReference<*> && key.engine == engine)
-                if (key.decl is IComputationDeclaration)
-                    ComputationNode(key)
+            node = if (key is InternalStateVariableReference<*, *> && key.engine == engine)
+                if (key.decl is IComputationDeclaration<*>)
+                    ComputationNode(key as InternalStateVariableReference<Any?, Any?>)
                 else
                     InternalStateNode(key)
             else {
@@ -67,7 +67,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
                 parentNode.addDependency(node)
             }
         }
-        if (node is InternalStateNode<*>) {
+        if (node is InternalStateNode<*, *>) {
             if (lru[key] == null) { // the get access here is important to move the entry to the MRU end of the queue
                 lru[key] = node
             }
@@ -100,7 +100,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
         for (dep in addedDeps) {
             fromNode.addDependency(getOrAddNodeAndGroups(dep))
         }
-        if (fromNode is InternalStateNode<*>) {
+        if (fromNode is InternalStateNode<*, *>) {
             fromNode.shrinkDependencies()
         }
     }
@@ -125,7 +125,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
                 field = newState
                 if (newState == ECacheEntryState.VALID) {
                     lastValidation = clock.getTime()
-                    if (this is InternalStateNode<*>) {
+                    if (this is InternalStateNode<*, *>) {
                         //lru[key] // get access to move then entry to the MRU end of the queue
                     }
                 }
@@ -229,8 +229,9 @@ class DependencyGraph(val engine: IncrementalEngine) {
         override fun toString(): String = "external[$key]"
     }
 
-    open inner class InternalStateNode<E>(override val key: InternalStateVariableReference<E>) : Node(key) {
-        private var value: Optional<E> = Optional.empty()
+    open inner class InternalStateNode<In, Out>(override val key: InternalStateVariableReference<In, Out>) : Node(key) {
+        private val inputValues: MutableMap<ComputationNode<*>, In> = HashMap()
+        private var outputValue: Optional<Out> = Optional.empty()
         /**
          * if true, the engine will validate it directly after it got invalidated, without any external trigger
          */
@@ -249,9 +250,15 @@ class DependencyGraph(val engine: IncrementalEngine) {
         }
         fun isAutoValidate() = autoValidate
 
-        fun getValue() = value
-        fun setValue(value: E) {
-            this.value = Optional.of(value)
+        fun getValue(): Optional<Out> {
+            if (!outputValue.hasValue() && inputValues.isNotEmpty()) {
+                outputValue = Optional.of(key.decl.reduce(inputValues.values))
+            }
+            return outputValue
+        }
+        fun writeValue(value: In, source: ComputationNode<*>) {
+            outputValue = Optional.empty()
+            inputValues[source] = value
         }
 
         override fun dependencyInvalidated() {
@@ -287,7 +294,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
         }
     }
 
-    inner class ComputationNode<E>(key: InternalStateVariableReference<E>) : InternalStateNode<E>(key) {
+    inner class ComputationNode<E>(key: InternalStateVariableReference<E, E>) : InternalStateNode<E, E>(key) {
         var lastException: Throwable? = null
 
         override fun toString(): String = "computation[${key.decl}]"
@@ -300,7 +307,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
         }
         fun validationSuccessful(newValue: E, newDependencies: Set<IStateVariableReference<*>>) {
             require(state == ECacheEntryState.VALIDATING) { "There is no active validation for $key" }
-            setValue(newValue)
+            writeValue(newValue, this)
             lastException = null
             newDependencies.map { getOrAddNode(it) }
                 .filterIsInstance<ExternalStateGroupNode>()

@@ -1,10 +1,6 @@
 package org.modelix.incremental
 
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.*
-import kotlinx.coroutines.internal.synchronized
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlin.collections.HashSet
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
@@ -28,14 +24,14 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
         if (disposed) throw IllegalStateException("engine is disposed")
     }
 
-    override fun <T> readStateVariable(call: IStateVariableDeclaration<T>): T {
+    override fun <T> readStateVariable(call: IStateVariableDeclaration<*, T>): T {
         checkDisposed()
         val engineValueKey = InternalStateVariableReference(this, call)
         DependencyTracking.accessed(engineValueKey)
         return update(engineValueKey)
     }
 
-    override fun <T> readStateVariables(calls: List<IStateVariableDeclaration<T>>): List<T> {
+    override fun <T> readStateVariables(calls: List<IStateVariableDeclaration<*, T>>): List<T> {
         checkDisposed()
         val keys = calls.map { InternalStateVariableReference(this, it) }
         keys.forEach { DependencyTracking.accessed(it) }
@@ -43,27 +39,27 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
     }
 
     @Synchronized
-    private fun <T> update(engineValueKey: InternalStateVariableReference<T>): T {
+    private fun <T> update(engineValueKey: InternalStateVariableReference<*, T>): T {
         checkDisposed()
         var value: T? = null
         var exception: Throwable? = null
         var state: ECacheEntryState = ECacheEntryState.NEW
-        val node: DependencyGraph.InternalStateNode<T>
+        val node: DependencyGraph.InternalStateNode<*, T>
         var evaluation: Evaluation? = null
 
-        node = graph.getOrAddNode(engineValueKey) as DependencyGraph.InternalStateNode<T>
+        node = graph.getOrAddNode(engineValueKey) as DependencyGraph.InternalStateNode<*, T>
         state = node.state
         when (state) {
             ECacheEntryState.VALID -> {
                 return node.getValue().getValue()
             }
             ECacheEntryState.FAILED -> {
-                throw (if (node is DependencyGraph.ComputationNode) node.lastException else null) ?: RuntimeException()
+                throw (if (node is DependencyGraph.ComputationNode<*>) node.lastException else null) ?: RuntimeException()
             }
             else -> {
-                if (node is DependencyGraph.ComputationNode) {
+                if (node is DependencyGraph.ComputationNode<*>) {
                     val decl = engineValueKey.decl
-                    if (decl is IComputationDeclaration) {
+                    if (decl is IComputationDeclaration<*>) {
                         evaluation = Evaluation(engineValueKey, decl, activeEvaluation)
                         evaluation!!.detectCycle()
                         try {
@@ -78,8 +74,8 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
                             } else {
                                 node.startValidation()
                                 try {
-                                    val value = decl.invoke(IncrementalFunctionContext(node))
-                                    node.validationSuccessful(value, evaluation.dependencies)
+                                    val value = (decl as IComputationDeclaration<T>).invoke(IncrementalFunctionContext(node) as IIncrementalFunctionContext<T>)
+                                    (node as DependencyGraph.ComputationNode<T>).validationSuccessful(value, evaluation.dependencies)
                                     return value
                                 } catch (e : Throwable) {
                                     node.validationFailed(e, evaluation.dependencies)
@@ -125,7 +121,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
 
     @Synchronized
     override fun modified(key: IStateVariableReference<*>) {
-        if (key is InternalStateVariableReference<*> && key.engine == this) return
+        if (key is InternalStateVariableReference<*, *> && key.engine == this) return
         for (group in key.iterateGroups()) {
             val node = graph.getNode(group)
             if (node != null) {
@@ -158,18 +154,6 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
         }
     }
 
-    override fun <T> readStateVariable(call: IStateVariableDeclaration<T>, callback: (T) -> Unit) {
-        engineScope.launch { callback(readStateVariable(call)) }
-    }
-
-    override fun <T> readStateVariables(calls: List<IStateVariableDeclaration<T>>, callback: (List<T>) -> Unit) {
-        engineScope.launch { callback(readStateVariables(calls)) }
-    }
-
-    override fun <T> activate(call: IncrementalFunctionCall<T>, callback: (IActiveOutput<T>) -> Unit) {
-        engineScope.launch { callback(activate(call)) }
-    }
-
     override fun flush(callback: () -> Unit) {
         engineScope.launch {
             flush()
@@ -186,8 +170,12 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
             TODO("Not yet implemented")
         }
 
-        override fun <T> writeStateVariable(ref: IStateVariableReference<T>, value: T) {
-            TODO("Not yet implemented")
+        override fun <T> writeStateVariable(ref: IInternalStateVariableReference<T, *>, value: T) {
+            val targetNode = graph.getOrAddNode(ref) as DependencyGraph.InternalStateNode<T, *>
+            targetNode.writeValue(value, node)
+        }
+        override fun <T> writeStateVariable(ref: IStateVariableDeclaration<T, *>, value: T) {
+            writeStateVariable(InternalStateVariableReference(this@IncrementalEngine, ref), value)
         }
     }
 
