@@ -262,7 +262,9 @@ class DependencyGraph(val engine: IncrementalEngine) {
         fun writeValue(value: In, source: ComputationNode<*>) {
             outputValue = Optional.empty()
             inputValues[source] = value
-            getReverseDependencies().forEach { it.dependencyInvalidated() }
+            if (state != ECacheEntryState.VALIDATING) {
+                getReverseDependencies().forEach { it.dependencyInvalidated() }
+            }
         }
 
         override fun dependencyInvalidated() {
@@ -320,7 +322,9 @@ class DependencyGraph(val engine: IncrementalEngine) {
             state = ECacheEntryState.VALID
         }
         fun validationFailed(exception: Throwable, newDependencies: Set<IStateVariableReference<*>>) {
-            require(state == ECacheEntryState.VALIDATING) { "There is no active validation for $key" }
+            if (state != ECacheEntryState.VALIDATING) {
+                throw RuntimeException("There is no active validation for $key", exception)
+            }
             lastException = exception
             setDependencies(this, newDependencies)
             state = ECacheEntryState.FAILED

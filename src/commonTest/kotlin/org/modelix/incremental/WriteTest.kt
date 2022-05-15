@@ -53,4 +53,29 @@ class WriteTest {
         assertEquals(11L, readFunction())
     }
 
+    @Test
+    fun multipleWrites() = runTestAndCleanup {
+        val longListType = StateVariableType<Long, List<Long>>(emptyList()) { it.toList() }
+        val svar = StateVariableDeclaration0<Long, List<Long>>("var1", longListType)
+
+        val writeFunction1 = engine.incrementalFunction<Unit>("write1") { context ->
+            context.writeStateVariable(svar, 110L)
+        }
+        val writeFunction2 = engine.incrementalFunction<Unit>("write2") { context ->
+            context.writeStateVariable(svar, 200L)
+        }
+        val avg = engine.incrementalFunction<Long>("read") { context ->
+            val values = context.readStateVariable(svar)
+            if (values.isEmpty()) 0L else values.sum() / values.size
+        }
+
+        assertEquals(0L, avg())
+        writeFunction1()
+        assertEquals(110L, avg())
+        writeFunction2()
+        assertEquals(155L, avg())
+        writeFunction1()
+        assertEquals(155L, avg())
+    }
+
 }
