@@ -252,13 +252,17 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
         fun getValue(): Optional<Out> {
             if (!outputValue.hasValue() && inputValues.isNotEmpty()) {
-                outputValue = Optional.of(key.decl.reduce(inputValues.values))
+                outputValue = Optional.of(key.decl.type.reduce(inputValues.values))
             }
             return outputValue
+        }
+        fun readValue(): Out {
+            return getValue().getOrElse { key.decl.type.getDefault() }
         }
         fun writeValue(value: In, source: ComputationNode<*>) {
             outputValue = Optional.empty()
             inputValues[source] = value
+            getReverseDependencies().forEach { it.dependencyInvalidated() }
         }
 
         override fun dependencyInvalidated() {

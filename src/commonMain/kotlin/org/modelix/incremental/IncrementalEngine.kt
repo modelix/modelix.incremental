@@ -74,7 +74,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
                             } else {
                                 node.startValidation()
                                 try {
-                                    val value = (decl as IComputationDeclaration<T>).invoke(IncrementalFunctionContext(node) as IIncrementalFunctionContext<T>)
+                                    val value = (decl as IComputationDeclaration<T>).invoke(IncrementalFunctionContext(evaluation, node) as IIncrementalFunctionContext<T>)
                                     (node as DependencyGraph.ComputationNode<T>).validationSuccessful(value, evaluation.dependencies)
                                     return value
                                 } catch (e : Throwable) {
@@ -89,7 +89,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
                         TODO("run triggers")
                     }
                 } else {
-                    return node.getValue().getValue()
+                    return node.getValue().getOrElse { node.key.decl.type.getDefault() }
                 }
             }
         }
@@ -115,6 +115,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
     }
 
     override fun accessed(key: IStateVariableReference<*>) {
+        // TODO check if access and evaluation are on the same thread
         val evaluation = activeEvaluation ?: return
         evaluation.dependencies += key
     }
@@ -161,18 +162,25 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
         }
     }
 
-    private inner class IncrementalFunctionContext<RetT>(val node: DependencyGraph.ComputationNode<RetT>) : IIncrementalFunctionContext<RetT> {
+    private inner class IncrementalFunctionContext<RetT>(val evaluation: Evaluation, val node: DependencyGraph.ComputationNode<RetT>) : IIncrementalFunctionContext<RetT> {
         override fun readOwnStateVariable(): Optional<RetT> {
             return node.getValue()
         }
 
-        override fun <T> readStateVariable(key: IStateVariableReference<T>): Optional<T> {
-            TODO("Not yet implemented")
+        override fun <T> readStateVariable(key: IInternalStateVariableReference<*, T>): T {
+            evaluation.dependencies += key
+            val varNode = graph.getOrAddNode(key) as DependencyGraph.InternalStateNode<*, T>
+            return varNode.readValue()
+        }
+
+        override fun <T> readStateVariable(key: IStateVariableDeclaration<*, T>): T {
+            return readStateVariable(InternalStateVariableReference(this@IncrementalEngine, key))
         }
 
         override fun <T> writeStateVariable(ref: IInternalStateVariableReference<T, *>, value: T) {
             val targetNode = graph.getOrAddNode(ref) as DependencyGraph.InternalStateNode<T, *>
             targetNode.writeValue(value, node)
+            targetNode.addDependency(node)
         }
         override fun <T> writeStateVariable(ref: IStateVariableDeclaration<T, *>, value: T) {
             writeStateVariable(InternalStateVariableReference(this@IncrementalEngine, ref), value)

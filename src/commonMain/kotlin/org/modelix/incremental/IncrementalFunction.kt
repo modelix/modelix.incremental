@@ -58,7 +58,7 @@ class IncrementalFunctionImplementation6<RetT, P1, P2, P3, P4, P5, P6>(
 /**
  * @param defaultValue Is used when a dependency cycle is detected.
  */
-abstract class IncrementalFunctionCall<RetT>() : IComputationDeclaration<RetT> {
+abstract class IncrementalFunctionCall<RetT>() : IComputationDeclaration<RetT>, IStateVariableType<RetT, RetT> {
     /**
      * Shouldn't be invoked directly. Use IIncrementalEngine instead.
      */
@@ -66,6 +66,10 @@ abstract class IncrementalFunctionCall<RetT>() : IComputationDeclaration<RetT> {
     fun bind(engine: IIncrementalEngine): () -> RetT = { engine.readStateVariable(this) }
     override fun reduce(inputValues: Iterable<RetT>): RetT {
         return inputValues.first()
+    }
+    override val type: IStateVariableType<RetT, RetT> get() = this
+    override fun getDefault(): RetT {
+        throw RuntimeException("Function is expected to be executed before reading the result")
     }
 }
 data class IncrementalFunctionCall0<RetT>(

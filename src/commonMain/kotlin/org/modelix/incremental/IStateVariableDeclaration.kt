@@ -1,5 +1,19 @@
 package org.modelix.incremental
 
+interface IStateVariableType<in In, out Out> {
+    fun getDefault(): Out
+    fun reduce(inputValues: Iterable<In>): Out
+}
+class StateVariableType<in In, out Out>(val defaultValue: Out, val reduceFunction: (Iterable<In>)->Out) : IStateVariableType<In, Out> {
+    override fun getDefault(): Out {
+        return defaultValue
+    }
+
+    override fun reduce(inputValues: Iterable<In>): Out {
+        return reduceFunction(inputValues)
+    }
+}
+
 /**
  * An IStateVariableDeclaration is an identifier for a state variable inside an IIncrementalEngine.
  * Multiple engine instances can have their own instance of a variable for the same IStateVariableDeclaration.
@@ -9,18 +23,18 @@ package org.modelix.incremental
  * The state variable can have parameters that are accessible from computations.
  */
 interface IStateVariableDeclaration<in In, out Out> {
-    fun reduce(inputValues: Iterable<In>): Out
+    val type: IStateVariableType<In, Out>
 }
-abstract class StateVariableDeclaration<In, Out>(open val name: String, open val reduceFunction: (Iterable<In>) -> Out) : IStateVariableDeclaration<In, Out> {
-    override fun reduce(inputValues: Iterable<In>): Out = reduceFunction(inputValues)
+abstract class StateVariableDeclaration<In, Out>() : IStateVariableDeclaration<In, Out> {
+    abstract val name: String
 }
-data class StateVariableDeclaration0<In, Out>(override val name: String, override val reduceFunction: (Iterable<In>)->Out) : StateVariableDeclaration<In, Out>(name, reduceFunction)
-data class StateVariableDeclaration1<In, Out, P1>(override val name: String, val p1: P1, override val reduceFunction: (Iterable<In>)->Out) : StateVariableDeclaration<In, Out>(name, reduceFunction)
-data class StateVariableDeclaration2<In, Out, P1, P2>(override val name: String, val p1: P1, val p2: P2, override val reduceFunction: (Iterable<In>)->Out) : StateVariableDeclaration<In, Out>(name, reduceFunction)
-data class StateVariableDeclaration3<In, Out, P1, P2, P3>(override val name: String, val p1: P1, val p2: P2, val p3: P3, override val reduceFunction: (Iterable<In>)->Out) : StateVariableDeclaration<In, Out>(name, reduceFunction)
-data class StateVariableDeclaration4<In, Out, P1, P2, P3, P4>(override val name: String, val p1: P1, val p2: P2, val p3: P3, val p4: P4, override val reduceFunction: (Iterable<In>)->Out) : StateVariableDeclaration<In, Out>(name, reduceFunction)
-data class StateVariableDeclaration5<In, Out, P1, P2, P3, P4, P5>(override val name: String, val p1: P1, val p2: P2, val p3: P3, val p4: P4, val p5: P5, override val reduceFunction: (Iterable<In>)->Out) : StateVariableDeclaration<In, Out>(name, reduceFunction)
-data class StateVariableDeclaration6<In, Out, P1, P2, P3, P4, P5, P6>(override val name: String, val p1: P1, val p2: P2, val p3: P3, val p4: P4, val p5: P5, val p6: P6, override val reduceFunction: (Iterable<In>)->Out) : StateVariableDeclaration<In, Out>(name, reduceFunction)
+data class StateVariableDeclaration0<In, Out>(override val name: String, override val type: IStateVariableType<In, Out>) : StateVariableDeclaration<In, Out>()
+data class StateVariableDeclaration1<In, Out, P1>(override val name: String, val p1: P1, override val type: IStateVariableType<In, Out>) : StateVariableDeclaration<In, Out>()
+data class StateVariableDeclaration2<In, Out, P1, P2>(override val name: String, val p1: P1, val p2: P2, override val type: IStateVariableType<In, Out>) : StateVariableDeclaration<In, Out>()
+data class StateVariableDeclaration3<In, Out, P1, P2, P3>(override val name: String, val p1: P1, val p2: P2, val p3: P3, override val type: IStateVariableType<In, Out>) : StateVariableDeclaration<In, Out>()
+data class StateVariableDeclaration4<In, Out, P1, P2, P3, P4>(override val name: String, val p1: P1, val p2: P2, val p3: P3, val p4: P4, override val type: IStateVariableType<In, Out>) : StateVariableDeclaration<In, Out>()
+data class StateVariableDeclaration5<In, Out, P1, P2, P3, P4, P5>(override val name: String, val p1: P1, val p2: P2, val p3: P3, val p4: P4, val p5: P5, override val type: IStateVariableType<In, Out>) : StateVariableDeclaration<In, Out>()
+data class StateVariableDeclaration6<In, Out, P1, P2, P3, P4, P5, P6>(override val name: String, val p1: P1, val p2: P2, val p3: P3, val p4: P4, val p5: P5, val p6: P6, override val type: IStateVariableType<In, Out>) : StateVariableDeclaration<In, Out>()
 
 interface IInternalStateVariableReference<in In, out Out> : IStateVariableReference<Out>
 
