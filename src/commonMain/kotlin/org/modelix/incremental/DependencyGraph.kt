@@ -144,7 +144,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             dependency.addReverseDependency(this)
         }
 
-        fun removeDependency(dependency: Node) {
+        open fun removeDependency(dependency: Node) {
             dependencies -= dependency
             dependency.removeReverseDependency(this)
         }
@@ -262,8 +262,17 @@ class DependencyGraph(val engine: IncrementalEngine) {
         fun writeValue(value: In, source: ComputationNode<*>) {
             outputValue = Optional.empty()
             inputValues[source] = value
+            addDependency(source)
             if (state != ECacheEntryState.VALIDATING) {
                 getReverseDependencies().forEach { it.dependencyInvalidated() }
+            }
+        }
+
+        override fun removeDependency(dependency: Node) {
+            super.removeDependency(dependency)
+            if (inputValues.contains(dependency)) {
+                inputValues.remove(dependency)
+                outputValue = Optional.empty()
             }
         }
 

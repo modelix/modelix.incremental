@@ -78,4 +78,41 @@ class WriteTest {
         assertEquals(155L, avg())
     }
 
+    @Test
+    fun revalidateWrite() = runTestAndCleanup {
+        val input1 = TrackableValue<Int>(1)
+        val longListType = StateVariableType<Long, List<Long>>(emptyList()) {
+            println("reduce")
+            it.toList()
+        }
+        val svar = StateVariableDeclaration0<Long, List<Long>>("var1", longListType)
+
+        val writeFunction1 = engine.incrementalFunction<Unit>("write1") { context ->
+            println("write1")
+            if (input1.getValue() == 1) {
+                context.writeStateVariable(svar, 110L)
+            }
+        }
+        val writeFunction2 = engine.incrementalFunction<Unit>("write2") { context ->
+            println("write2")
+            context.writeStateVariable(svar, 200L)
+        }
+        val avg = engine.incrementalFunction<Long>("avg") { context ->
+            println("avg")
+            val values = context.readStateVariable(svar)
+            if (values.isEmpty()) 0L else values.sum() / values.size
+        }
+
+        assertEquals(0L, avg())
+        writeFunction1()
+        assertEquals(110L, avg())
+        writeFunction2()
+        assertEquals(155L, avg())
+        writeFunction1()
+        assertEquals(155L, avg())
+        println("set input1 = 0")
+        input1.setValue(0)
+        assertEquals(200L, avg())
+    }
+
 }
