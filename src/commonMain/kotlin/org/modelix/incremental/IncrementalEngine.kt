@@ -120,9 +120,10 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
     }
 
     override fun accessed(key: IStateVariableReference<*>) {
-        // TODO check if access and evaluation are on the same thread
         val evaluation = activeEvaluation ?: return
-        evaluation.dependencies += key
+        if (evaluation.thread == getCurrentThread()) {
+            evaluation.dependencies += key
+        }
     }
 
     @Synchronized
@@ -199,6 +200,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
     ) : AbstractCoroutineContextElement(Evaluation) {
         companion object Key : CoroutineContext.Key<Evaluation>
 
+        val thread: Any = getCurrentThread()
         val dependencies: MutableSet<IStateVariableReference<*>> = HashSet()
 
         fun getEvaluations(): List<Evaluation> {
