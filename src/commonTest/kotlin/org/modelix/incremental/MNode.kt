@@ -6,6 +6,10 @@ class MNode(val type: String, var role: String? = null) : IStateVariableReferenc
     private val properties: MutableMap<String, String> = HashMap()
     private val references: MutableMap<String, MNode> = HashMap()
 
+    constructor(type: String, initializer: MNode.() -> Unit) : this(type, null) {
+        initializer()
+    }
+
     override fun read(): MNode = this
 
     fun getChildren(role: String): List<MNode> {

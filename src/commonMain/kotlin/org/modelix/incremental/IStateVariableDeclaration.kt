@@ -24,17 +24,24 @@ class StateVariableType<in In, out Out>(val defaultValue: Out, val reduceFunctio
  */
 interface IStateVariableDeclaration<in In, out Out> {
     val type: IStateVariableType<In, Out>
+    fun getTriggers(): List<IComputationDeclaration<*>>
 }
 abstract class StateVariableDeclaration<In, Out>() : IStateVariableDeclaration<In, Out> {
     abstract val name: String
 }
-data class StateVariableDeclaration0<In, Out>(override val name: String, override val type: IStateVariableType<In, Out>) : StateVariableDeclaration<In, Out>()
-data class StateVariableDeclaration1<In, Out, P1>(override val name: String, val p1: P1, override val type: IStateVariableType<In, Out>) : StateVariableDeclaration<In, Out>()
-data class StateVariableDeclaration2<In, Out, P1, P2>(override val name: String, val p1: P1, val p2: P2, override val type: IStateVariableType<In, Out>) : StateVariableDeclaration<In, Out>()
-data class StateVariableDeclaration3<In, Out, P1, P2, P3>(override val name: String, val p1: P1, val p2: P2, val p3: P3, override val type: IStateVariableType<In, Out>) : StateVariableDeclaration<In, Out>()
-data class StateVariableDeclaration4<In, Out, P1, P2, P3, P4>(override val name: String, val p1: P1, val p2: P2, val p3: P3, val p4: P4, override val type: IStateVariableType<In, Out>) : StateVariableDeclaration<In, Out>()
-data class StateVariableDeclaration5<In, Out, P1, P2, P3, P4, P5>(override val name: String, val p1: P1, val p2: P2, val p3: P3, val p4: P4, val p5: P5, override val type: IStateVariableType<In, Out>) : StateVariableDeclaration<In, Out>()
-data class StateVariableDeclaration6<In, Out, P1, P2, P3, P4, P5, P6>(override val name: String, val p1: P1, val p2: P2, val p3: P3, val p4: P4, val p5: P5, val p6: P6, override val type: IStateVariableType<In, Out>) : StateVariableDeclaration<In, Out>()
+data class StateVariableDeclaration0<In, Out>(
+    override val name: String,
+    override val type: IStateVariableType<In, Out>,
+    private val triggers: List<IComputationDeclaration<*>> = emptyList()
+) : StateVariableDeclaration<In, Out>() {
+    override fun getTriggers(): List<IComputationDeclaration<*>> = triggers
+}
+//data class StateVariableDeclaration1<In, Out, P1>(override val name: String, val p1: P1, override val type: IStateVariableType<In, Out>) : StateVariableDeclaration<In, Out>()
+//data class StateVariableDeclaration2<In, Out, P1, P2>(override val name: String, val p1: P1, val p2: P2, override val type: IStateVariableType<In, Out>) : StateVariableDeclaration<In, Out>()
+//data class StateVariableDeclaration3<In, Out, P1, P2, P3>(override val name: String, val p1: P1, val p2: P2, val p3: P3, override val type: IStateVariableType<In, Out>) : StateVariableDeclaration<In, Out>()
+//data class StateVariableDeclaration4<In, Out, P1, P2, P3, P4>(override val name: String, val p1: P1, val p2: P2, val p3: P3, val p4: P4, override val type: IStateVariableType<In, Out>) : StateVariableDeclaration<In, Out>()
+//data class StateVariableDeclaration5<In, Out, P1, P2, P3, P4, P5>(override val name: String, val p1: P1, val p2: P2, val p3: P3, val p4: P4, val p5: P5, override val type: IStateVariableType<In, Out>) : StateVariableDeclaration<In, Out>()
+//data class StateVariableDeclaration6<In, Out, P1, P2, P3, P4, P5, P6>(override val name: String, val p1: P1, val p2: P2, val p3: P3, val p4: P4, val p5: P5, val p6: P6, override val type: IStateVariableType<In, Out>) : StateVariableDeclaration<In, Out>()
 
 interface IInternalStateVariableReference<in In, out Out> : IStateVariableReference<Out>
 

@@ -16,6 +16,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
         override fun evicted(key: IStateVariableGroup, value: InternalStateNode<*, *>) {
             if (value.state == ECacheEntryState.VALIDATING || value.state == ECacheEntryState.NEW) {
                 // will be added back soon
+                // TODO there is a risc of a memory leak here. We should keep track of the nodes that were evicted but not removed.
                 return
             }
             tryRemoveNode(value)
@@ -173,6 +174,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
         fun isConnected() = dependencies.isNotEmpty() || reverseDependencies.isNotEmpty()
 
         open fun invalidate() {
+            if (state == ECacheEntryState.VALIDATING) return
             state = ECacheEntryState.INVALID
             for (dep in getReverseDependencies()) {
                 dep.dependencyInvalidated()
@@ -180,6 +182,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
         }
 
         open fun dependencyInvalidated() {
+            if (state == ECacheEntryState.VALID) return
             state = ECacheEntryState.DEPENDENCY_INVALID
             for (dep in getReverseDependencies()) {
                 dep.dependencyInvalidated()
@@ -277,6 +280,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
         }
 
         override fun dependencyInvalidated() {
+            if (state == ECacheEntryState.VALIDATING) return
             val wasValid = state == ECacheEntryState.VALID
             state = ECacheEntryState.DEPENDENCY_INVALID
             if (wasValid) {
@@ -287,6 +291,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
         }
 
         override fun invalidate() {
+            if (state == ECacheEntryState.VALIDATING) return
             val wasValid = state == ECacheEntryState.VALID
             state = ECacheEntryState.INVALID
             if (wasValid) {
@@ -316,6 +321,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
     inner class ComputationNode<E>(key: InternalStateVariableReference<E, E>) : InternalStateNode<E, E>(key) {
         var lastException: Throwable? = null
+        val triggeredFrom: MutableSet<InternalStateNode<*, *>> = HashSet()
 
         override fun toString(): String = "computation[${key.decl}]"
 
