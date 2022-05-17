@@ -59,7 +59,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
 
                     // This dependency has to be added here, because the node may be removed from the graph
                     // before the parent finishes evaluation and then the transitive dependencies are lost.
-                    evaluation.parent?.let { graph.getOrAddNode(it.dependencyKey).addDependency(node) }
+                    evaluation.parent?.let { graph.getOrAddNode(it.dependencyKey).addDependency(node, EDependencyType.PULL) }
 
                     for (trigger in node.key.decl.getTriggers()) {
                         update(InternalStateVariableReference(this, trigger))
@@ -77,11 +77,11 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
                         }
                     } else {
                         try {
-                            val earlierWriters = node.getDependencies()
+                            val earlierWriters = node.getDependencies(EDependencyType.PULL)
                                 .filterIsInstance<DependencyGraph.ComputationNode<*>>()
                                 .filter { it.state != ECacheEntryState.VALID }
                             for (earlierWriter in earlierWriters) {
-                                node.removeDependency(earlierWriter)
+                                node.removeDependency(earlierWriter, EDependencyType.PULL)
                                 update(earlierWriter.key)
                             }
                             node.state = ECacheEntryState.VALID
@@ -184,7 +184,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
         override fun <T> writeStateVariable(ref: IInternalStateVariableReference<T, *>, value: T) {
             val targetNode = graph.getOrAddNode(ref) as DependencyGraph.InternalStateNode<T, *>
             targetNode.writeValue(value, node)
-            targetNode.addDependency(node)
+            targetNode.addDependency(node, EDependencyType.PULL)
         }
         override fun <T> writeStateVariable(ref: IStateVariableDeclaration<T, *>, value: T) {
             writeStateVariable(InternalStateVariableReference(this@IncrementalEngine, ref), value)

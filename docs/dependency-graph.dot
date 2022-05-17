@@ -1,0 +1,40 @@
+digraph dependencyGraph {
+    // tc... = typesystem computation
+    // t... = type
+    // c... = computation
+    // i... = external state variable (input)
+    // s... = internal state variable
+
+    typesystem
+    i1 [color=lightblue2, shape=box, style=filled]
+    i2 [color=lightblue2, shape=box, style=filled]
+    i_1_1 [color=lightblue2, shape=box, style=filled]
+    i_1_1_2 [color=lightblue2, shape=box, style=filled]
+    i_1_2 [color=lightblue2, shape=box, style=filled]
+    s1 [color=wheat3, shape=box, style=filled]
+    t_1_1_1 [color=wheat3, shape=box, style=filled]
+
+    typesystem -> tc_1 [color=green3]
+    tc_1 -> tc_1_1 [color=green3]
+    tc_1 -> tc_1_2 [color=green3]
+    tc_1_1 -> tc_1_1_1 [color=green3]
+    tc_1_1 -> tc_1_1_2 [color=green3]
+    tc_1_1_1 -> i1 [color=blue]
+    tc_1_1_1 -> t_1_1_1 [color=red]
+    //t_1_1_1 -> typesystem [color=green3]
+    tc_1_1 -> i_1_1
+    tc_1_2 -> i_1_2
+    tc_1_1_2 -> i_1_1_2
+
+    // blue = read, green3 = trigger, red = write
+    c1 -> i1 [color=blue]
+    c1 -> i2 [color=blue]
+    c1 -> t_1_1_1 [color=blue]
+    s1 -> c1 [color=green3]
+    c2 -> s1 [color=blue]
+
+    c2 -> s1 [color=green3, style=dashed]
+    c1 -> t_1_1_1 [color=green3, style=dashed]
+    t_1_1_1 -> typesystem [color=green3, style=dashed]
+
+}

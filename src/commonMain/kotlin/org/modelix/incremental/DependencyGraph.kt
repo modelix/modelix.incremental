@@ -1,8 +1,6 @@
 package org.modelix.incremental
 
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.channels.Channel
-import kotlin.math.max
 
 /**
  * Not thread-safe.
@@ -28,19 +26,20 @@ class DependencyGraph(val engine: IncrementalEngine) {
     private fun tryRemoveNode(n1: InternalStateNode<*, *>) {
         if (n1.isAutoValidate()) return
         // replace n2->n1->n0 with n2->n0
-        val dependencies = n1.getDependencies().toList()
+        val dtype = EDependencyType.PULL
+        val dependencies = n1.getDependencies(dtype).toList()
         //if (dependencies.any { it.state == ECacheEntryState.VALIDATING }) return
-        if (n1.getReverseDependencies().any { it.state == ECacheEntryState.VALIDATING }) return
-        dependencies.forEach { n0 -> n1.removeDependency(n0) }
-        val reverseDependencies = n1.getReverseDependencies().toList()
+        if (n1.getReverseDependencies(dtype).any { it.state == ECacheEntryState.VALIDATING }) return
+        dependencies.forEach { n0 -> n1.removeDependency(n0, dtype) }
+        val reverseDependencies = n1.getReverseDependencies(dtype).toList()
         for (n2 in reverseDependencies) {
-            n2.removeDependency(n1)
-            dependencies.forEach { n0 -> n2.addDependency(n0) }
+            n2.removeDependency(n1, dtype)
+            dependencies.forEach { n0 -> n2.addDependency(n0, dtype) }
             //println("Merged $n1 into $n2")
         }
         reverseDependencies.filterIsInstance<InternalStateNode<*, *>>().forEach { it.shrinkDependencies() }
-        require(n1.getDependencies().isEmpty()) { "$n1 still has dependencies" }
-        require(n1.getReverseDependencies().isEmpty()) { "$n1 still has reverse dependencies" }
+        require(n1.getDependencies(dtype).isEmpty()) { "$n1 still has dependencies" }
+        require(n1.getReverseDependencies(dtype).isEmpty()) { "$n1 still has reverse dependencies" }
         nodes.remove(n1.key)
     }
 
@@ -65,7 +64,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             nodes[key] = node
             if (parentGroup != null) {
                 val parentNode = getOrAddNodeAndGroups(parentGroup)
-                parentNode.addDependency(node)
+                parentNode.addDependency(node, EDependencyType.PULL)
             }
         }
         if (node is InternalStateNode<*, *>) {
@@ -76,44 +75,44 @@ class DependencyGraph(val engine: IncrementalEngine) {
         return node
     }
 
-    fun getDependencies(from: IStateVariableReference<*>): Set<IStateVariableGroup> {
+    fun getDependencies(from: IStateVariableReference<*>, type: EDependencyType): Set<IStateVariableGroup> {
         val fromNode = nodes[from] ?: return emptySet()
-        return fromNode.getDependencies().asSequence().map { it.key }.toSet()
+        return fromNode.getDependencies(type).asSequence().map { it.key }.toSet()
     }
 
-    fun getReverseDependencies(from: IStateVariableReference<*>): Set<IStateVariableGroup> {
+    fun getReverseDependencies(from: IStateVariableReference<*>, type: EDependencyType): Set<IStateVariableGroup> {
         val fromNode = nodes[from] ?: return emptySet()
-        return fromNode.getReverseDependencies().asSequence().map { it.key }.toSet()
+        return fromNode.getReverseDependencies(type).asSequence().map { it.key }.toSet()
     }
 
-    fun setDependencies(from: IStateVariableReference<*>, to: Set<IStateVariableReference<*>>) {
+    fun setDependencies(from: IStateVariableReference<*>, to: Set<IStateVariableReference<*>>, type: EDependencyType) {
         val fromNode = getOrAddNode(from)
-        setDependencies(fromNode, to)
+        setDependencies(fromNode, to, type)
     }
 
-    fun setDependencies(fromNode: Node, to: Set<IStateVariableReference<*>>) {
-        val current = fromNode.getDependencies().asSequence().map { it.key }.toSet()
+    fun setDependencies(fromNode: Node, to: Set<IStateVariableReference<*>>, type: EDependencyType) {
+        val current = fromNode.getDependencies(type).asSequence().map { it.key }.toSet()
         val addedDeps: Set<IStateVariableGroup> = to - current
         val removedDeps: Set<IStateVariableGroup> = current - to
         for (dep in removedDeps) {
-            fromNode.removeDependency(getOrAddNodeAndGroups(dep))
+            fromNode.removeDependency(getOrAddNodeAndGroups(dep), type)
         }
         for (dep in addedDeps) {
-            fromNode.addDependency(getOrAddNodeAndGroups(dep))
+            fromNode.addDependency(getOrAddNodeAndGroups(dep), type)
         }
         if (fromNode is InternalStateNode<*, *>) {
             fromNode.shrinkDependencies()
         }
     }
 
-    fun addDependency(from: IStateVariableReference<*>, to: IStateVariableReference<*>) {
-        getOrAddNode(from).addDependency(getOrAddNode(to))
+    fun addDependency(from: IStateVariableReference<*>, to: IStateVariableReference<*>, type: EDependencyType) {
+        getOrAddNode(from).addDependency(getOrAddNode(to), type)
     }
 
-    fun removeDependency(from: IStateVariableReference<*>, to: IStateVariableReference<*>) {
+    fun removeDependency(from: IStateVariableReference<*>, to: IStateVariableReference<*>, type: EDependencyType) {
         val fromNode = nodes[from] ?: return
         val toNode = nodes[to] ?: return
-        fromNode.removeDependency(toNode)
+        fromNode.removeDependency(toNode, type)
     }
 
     fun contains(key: IStateVariableReference<*>) = nodes.containsKey(key)
@@ -135,39 +134,39 @@ class DependencyGraph(val engine: IncrementalEngine) {
                 }
             }
         private var lastValidation: Long = 0L
-        private val reverseDependencies: MutableSet<Node> = HashSet()
-        private val dependencies: MutableSet<Node> = HashSet()
+        private val reverseDependencies: Array<MutableSet<Node>> = EDependencyType.values().map { HashSet<Node>() }.toTypedArray()
+        private val dependencies: Array<MutableSet<Node>> = EDependencyType.values().map { HashSet<Node>() }.toTypedArray()
 
-        fun addDependency(dependency: Node) {
+        fun addDependency(dependency: Node, type: EDependencyType) {
             if (dependency == this) return
             require(nodes.containsKey(dependency.key)) { "Not part of the graph: $dependency" }
-            dependencies += dependency
-            dependency.addReverseDependency(this)
+            dependencies[type.index] += dependency
+            dependency.addReverseDependency(this, type)
         }
 
-        open fun removeDependency(dependency: Node) {
-            dependencies -= dependency
-            dependency.removeReverseDependency(this)
+        open fun removeDependency(dependency: Node, type: EDependencyType) {
+            dependencies[type.index] -= dependency
+            dependency.removeReverseDependency(this, type)
         }
 
-        fun getDependencies(): Set<Node> = dependencies
+        fun getDependencies(type: EDependencyType): Set<Node> = dependencies[type.index]
 
-        fun getTransitiveDependencies(result: MutableSet<Node>): Set<Node> {
+        fun getTransitiveDependencies(result: MutableSet<Node>, type: EDependencyType): Set<Node> {
             if (!result.contains(this)) {
-                result += dependencies
-                dependencies.forEach { it.getTransitiveDependencies(result) }
+                result += dependencies[type.index]
+                dependencies[type.index].forEach { it.getTransitiveDependencies(result, type) }
             }
             return result
         }
-        open fun addReverseDependency(dependency: Node) {
-            reverseDependencies += dependency
+        open fun addReverseDependency(dependency: Node, type: EDependencyType) {
+            reverseDependencies[type.index] += dependency
         }
 
-        open fun removeReverseDependency(dependency: Node) {
-            reverseDependencies -= dependency
+        open fun removeReverseDependency(dependency: Node, type: EDependencyType) {
+            reverseDependencies[type.index] -= dependency
         }
 
-        fun getReverseDependencies(): Set<Node> = reverseDependencies
+        fun getReverseDependencies(type: EDependencyType): Set<Node> = reverseDependencies[type.index]
 
         fun isRoot() = reverseDependencies.isEmpty()
 
@@ -176,7 +175,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
         open fun invalidate() {
             if (state == ECacheEntryState.VALIDATING) return
             state = ECacheEntryState.INVALID
-            for (dep in getReverseDependencies()) {
+            for (dep in getReverseDependencies(EDependencyType.PULL)) {
                 dep.dependencyInvalidated()
             }
         }
@@ -184,7 +183,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
         open fun dependencyInvalidated() {
             if (state == ECacheEntryState.VALID) return
             state = ECacheEntryState.DEPENDENCY_INVALID
-            for (dep in getReverseDependencies()) {
+            for (dep in getReverseDependencies(EDependencyType.PULL)) {
                 dep.dependencyInvalidated()
             }
         }
@@ -197,22 +196,22 @@ class DependencyGraph(val engine: IncrementalEngine) {
         fun accessed() {
             if (state == ECacheEntryState.VALID) return
             state = ECacheEntryState.VALID
-            getReverseDependencies().filterIsInstance<ExternalStateGroupNode>().forEach { it.accessed() }
+            getReverseDependencies(EDependencyType.PULL).filterIsInstance<ExternalStateGroupNode>().forEach { it.accessed() }
         }
 
         fun getParentGroup(): ExternalStateGroupNode? {
             return parentGroup
         }
 
-        override fun addReverseDependency(dependency: Node) {
-            super.addReverseDependency(dependency)
+        override fun addReverseDependency(dependency: Node, type: EDependencyType) {
+            super.addReverseDependency(dependency, type)
             if (dependency is ExternalStateGroupNode) {
                 parentGroup = dependency
             }
         }
 
-        override fun removeReverseDependency(dependency: Node) {
-            super.removeReverseDependency(dependency)
+        override fun removeReverseDependency(dependency: Node, type: EDependencyType) {
+            super.removeReverseDependency(dependency, type)
             if (dependency == parentGroup) {
                 parentGroup = null
             }
@@ -220,10 +219,10 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
         fun removeIfUnused() {
             if (parentGroup == null) return
-            if (getReverseDependencies().size != 1) return
-            if (getReverseDependencies().first() != parentGroup) return
-            if (getDependencies().isNotEmpty()) return
-            parentGroup!!.removeDependency(this)
+            if (getReverseDependencies(EDependencyType.PULL).size != 1) return
+            if (getReverseDependencies(EDependencyType.PULL).first() != parentGroup) return
+            if (getDependencies(EDependencyType.PULL).isNotEmpty()) return
+            parentGroup!!.removeDependency(this, EDependencyType.PULL)
             nodes.remove(key)
         }
     }
@@ -265,15 +264,15 @@ class DependencyGraph(val engine: IncrementalEngine) {
         fun writeValue(value: In, source: ComputationNode<*>) {
             outputValue = Optional.empty()
             inputValues[source] = value
-            addDependency(source)
+            addDependency(source, EDependencyType.PUSH)
             if (state != ECacheEntryState.VALIDATING) {
-                getReverseDependencies().forEach { it.dependencyInvalidated() }
+                getReverseDependencies(EDependencyType.PULL).forEach { it.dependencyInvalidated() }
             }
         }
 
-        override fun removeDependency(dependency: Node) {
-            super.removeDependency(dependency)
-            if (inputValues.contains(dependency)) {
+        override fun removeDependency(dependency: Node, type: EDependencyType) {
+            super.removeDependency(dependency, type)
+            if (type == EDependencyType.PULL && inputValues.contains(dependency)) {
                 inputValues.remove(dependency)
                 outputValue = Optional.empty()
             }
@@ -302,13 +301,13 @@ class DependencyGraph(val engine: IncrementalEngine) {
         }
 
         fun shrinkDependencies() {
-            if (getDependencies().size < 5) return
-            getDependencies().filterIsInstance<ExternalStateGroupNode>()
+            if (getDependencies(EDependencyType.PULL).size < 5) return
+            getDependencies(EDependencyType.PULL).filterIsInstance<ExternalStateGroupNode>()
                 .groupBy { it.getParentGroup() }
                 .filter { it.key != null && it.value.size >= 2 }
                 .forEach {
-                    it.value.forEach { removeDependency(it) }
-                    addDependency(it.key!!)
+                    it.value.forEach { removeDependency(it, EDependencyType.PULL) }
+                    addDependency(it.key!!, EDependencyType.PULL)
                     it.value.forEach { it.removeIfUnused() }
                 }
         }
@@ -334,7 +333,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             newDependencies.map { getOrAddNode(it) }
                 .filterIsInstance<ExternalStateGroupNode>()
                 .forEach { it.accessed() }
-            setDependencies(this, newDependencies)
+            setDependencies(this, newDependencies, EDependencyType.PULL)
             state = ECacheEntryState.VALID
         }
         fun validationFailed(exception: Throwable, newDependencies: Set<IStateVariableReference<*>>) {
@@ -342,10 +341,15 @@ class DependencyGraph(val engine: IncrementalEngine) {
                 throw RuntimeException("There is no active validation for $key", exception)
             }
             lastException = exception
-            setDependencies(this, newDependencies)
+            setDependencies(this, newDependencies, EDependencyType.PULL)
             state = ECacheEntryState.FAILED
         }
 
     }
+}
+
+enum class EDependencyType(val index: Int) {
+    PULL(0),
+    PUSH(1)
 }
 
