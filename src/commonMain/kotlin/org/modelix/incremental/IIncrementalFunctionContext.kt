@@ -6,6 +6,7 @@ interface IIncrementalFunctionContext<RetT> {
     fun <T> readStateVariable(key: IStateVariableDeclaration<*, T>): T
     fun <T> writeStateVariable(ref: IInternalStateVariableReference<T, *>, value: T)
     fun <T> writeStateVariable(ref: IStateVariableDeclaration<T, *>, value: T)
+    fun trigger(ref: IComputationDeclaration<*>)
 }
 
 fun <T> IIncrementalFunctionContext<T>.readOwnStateVariable(defaultValue: ()->T): T {

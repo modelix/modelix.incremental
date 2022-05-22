@@ -32,9 +32,11 @@ digraph dependencyGraph {
     c1 -> t_1_1_1 [color=blue]
     s1 -> c1 [color=green3]
     c2 -> s1 [color=blue]
+    c1 -> s1 [color=red]
 
     c2 -> s1 [color=green3, style=dashed]
     c1 -> t_1_1_1 [color=green3, style=dashed]
     t_1_1_1 -> typesystem [color=green3, style=dashed]
 
 }
+

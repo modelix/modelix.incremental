@@ -26,7 +26,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
     private fun tryRemoveNode(n1: InternalStateNode<*, *>) {
         if (n1.isAutoValidate()) return
         // replace n2->n1->n0 with n2->n0
-        val dtype = EDependencyType.PULL
+        val dtype = EDependencyType.READ
         val dependencies = n1.getDependencies(dtype).toList()
         //if (dependencies.any { it.state == ECacheEntryState.VALIDATING }) return
         if (n1.getReverseDependencies(dtype).any { it.state == ECacheEntryState.VALIDATING }) return
@@ -64,7 +64,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             nodes[key] = node
             if (parentGroup != null) {
                 val parentNode = getOrAddNodeAndGroups(parentGroup)
-                parentNode.addDependency(node, EDependencyType.PULL)
+                parentNode.addDependency(node, EDependencyType.READ)
             }
         }
         if (node is InternalStateNode<*, *>) {
@@ -133,6 +133,8 @@ class DependencyGraph(val engine: IncrementalEngine) {
                     //println("Invalidated: $key")
                 }
             }
+        var triggerTargetInvalid = true
+        var triggerSourceInvalid = true
         private var lastValidation: Long = 0L
         private val reverseDependencies: Array<MutableSet<Node>> = EDependencyType.values().map { HashSet<Node>() }.toTypedArray()
         private val dependencies: Array<MutableSet<Node>> = EDependencyType.values().map { HashSet<Node>() }.toTypedArray()
@@ -175,16 +177,38 @@ class DependencyGraph(val engine: IncrementalEngine) {
         open fun invalidate() {
             if (state == ECacheEntryState.VALIDATING) return
             state = ECacheEntryState.INVALID
-            for (dep in getReverseDependencies(EDependencyType.PULL)) {
+            for (dep in getReverseDependencies(EDependencyType.READ)) {
                 dep.dependencyInvalidated()
+            }
+            for (dep in getReverseDependencies(EDependencyType.TRIGGER)) {
+                dep.triggerTargetInvalidated()
             }
         }
 
         open fun dependencyInvalidated() {
-            if (state == ECacheEntryState.VALID) return
+            if (state == ECacheEntryState.VALIDATING) return
             state = ECacheEntryState.DEPENDENCY_INVALID
-            for (dep in getReverseDependencies(EDependencyType.PULL)) {
+            for (dep in getReverseDependencies(EDependencyType.READ)) {
                 dep.dependencyInvalidated()
+            }
+            for (dep in getReverseDependencies(EDependencyType.TRIGGER)) {
+                dep.triggerTargetInvalidated()
+            }
+        }
+
+        open fun triggerTargetInvalidated() {
+            if (triggerTargetInvalid) return
+            triggerTargetInvalid = true
+            for (dep in getReverseDependencies(EDependencyType.TRIGGER)) {
+                triggerTargetInvalidated()
+            }
+        }
+
+        open fun triggerSourceInvalidated() {
+            if (triggerSourceInvalid) return
+            triggerSourceInvalid = true
+            for (dep in getDependencies(EDependencyType.TRIGGER)) {
+                triggerSourceInvalidated()
             }
         }
     }
@@ -196,7 +220,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
         fun accessed() {
             if (state == ECacheEntryState.VALID) return
             state = ECacheEntryState.VALID
-            getReverseDependencies(EDependencyType.PULL).filterIsInstance<ExternalStateGroupNode>().forEach { it.accessed() }
+            getReverseDependencies(EDependencyType.READ).filterIsInstance<ExternalStateGroupNode>().forEach { it.accessed() }
         }
 
         fun getParentGroup(): ExternalStateGroupNode? {
@@ -219,10 +243,10 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
         fun removeIfUnused() {
             if (parentGroup == null) return
-            if (getReverseDependencies(EDependencyType.PULL).size != 1) return
-            if (getReverseDependencies(EDependencyType.PULL).first() != parentGroup) return
-            if (getDependencies(EDependencyType.PULL).isNotEmpty()) return
-            parentGroup!!.removeDependency(this, EDependencyType.PULL)
+            if (getReverseDependencies(EDependencyType.READ).size != 1) return
+            if (getReverseDependencies(EDependencyType.READ).first() != parentGroup) return
+            if (getDependencies(EDependencyType.READ).isNotEmpty()) return
+            parentGroup!!.removeDependency(this, EDependencyType.READ)
             nodes.remove(key)
         }
     }
@@ -264,15 +288,15 @@ class DependencyGraph(val engine: IncrementalEngine) {
         fun writeValue(value: In, source: ComputationNode<*>) {
             outputValue = Optional.empty()
             inputValues[source] = value
-            addDependency(source, EDependencyType.PUSH)
+            addDependency(source, EDependencyType.TRIGGER)
             if (state != ECacheEntryState.VALIDATING) {
-                getReverseDependencies(EDependencyType.PULL).forEach { it.dependencyInvalidated() }
+                getReverseDependencies(EDependencyType.READ).forEach { it.dependencyInvalidated() }
             }
         }
 
         override fun removeDependency(dependency: Node, type: EDependencyType) {
             super.removeDependency(dependency, type)
-            if (type == EDependencyType.PULL && inputValues.contains(dependency)) {
+            if (type == EDependencyType.READ && inputValues.contains(dependency)) {
                 inputValues.remove(dependency)
                 outputValue = Optional.empty()
             }
@@ -301,13 +325,13 @@ class DependencyGraph(val engine: IncrementalEngine) {
         }
 
         fun shrinkDependencies() {
-            if (getDependencies(EDependencyType.PULL).size < 5) return
-            getDependencies(EDependencyType.PULL).filterIsInstance<ExternalStateGroupNode>()
+            if (getDependencies(EDependencyType.READ).size < 5) return
+            getDependencies(EDependencyType.READ).filterIsInstance<ExternalStateGroupNode>()
                 .groupBy { it.getParentGroup() }
                 .filter { it.key != null && it.value.size >= 2 }
                 .forEach {
-                    it.value.forEach { removeDependency(it, EDependencyType.PULL) }
-                    addDependency(it.key!!, EDependencyType.PULL)
+                    it.value.forEach { removeDependency(it, EDependencyType.READ) }
+                    addDependency(it.key!!, EDependencyType.READ)
                     it.value.forEach { it.removeIfUnused() }
                 }
         }
@@ -326,14 +350,19 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
         fun getComputation(): IComputationDeclaration<E> = key.decl as IComputationDeclaration<E>
 
-        fun validationSuccessful(newValue: E, newDependencies: Set<IStateVariableReference<*>>) {
+        fun validationSuccessful(
+            newValue: E,
+            newDependencies: Set<IStateVariableReference<*>>,
+            newTriggers: Set<IStateVariableReference<*>>,
+        ) {
             require(state == ECacheEntryState.VALIDATING) { "There is no active validation for $key" }
             writeValue(newValue, this)
             lastException = null
             newDependencies.map { getOrAddNode(it) }
                 .filterIsInstance<ExternalStateGroupNode>()
                 .forEach { it.accessed() }
-            setDependencies(this, newDependencies, EDependencyType.PULL)
+            setDependencies(this, newDependencies, EDependencyType.READ)
+            setDependencies(this, newTriggers, EDependencyType.TRIGGER)
             state = ECacheEntryState.VALID
         }
         fun validationFailed(exception: Throwable, newDependencies: Set<IStateVariableReference<*>>) {
@@ -341,7 +370,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
                 throw RuntimeException("There is no active validation for $key", exception)
             }
             lastException = exception
-            setDependencies(this, newDependencies, EDependencyType.PULL)
+            setDependencies(this, newDependencies, EDependencyType.READ)
             state = ECacheEntryState.FAILED
         }
 
@@ -349,7 +378,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
 }
 
 enum class EDependencyType(val index: Int) {
-    PULL(0),
-    PUSH(1)
+    READ(0),
+    TRIGGER(1)
 }
 

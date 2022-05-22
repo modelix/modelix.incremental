@@ -38,11 +38,34 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
         return keys.map { update(it) }
     }
 
+    private fun updateTriggerSource(node: DependencyGraph.Node) {
+        if (!node.triggerSourceInvalid) return
+        node.triggerSourceInvalid = false
+        for (triggerSource in node.getReverseDependencies(EDependencyType.TRIGGER)) {
+            updateTriggerSource(triggerSource)
+            update(triggerSource.key as InternalStateVariableReference<*, *>)
+        }
+    }
+
+    private fun updateTriggerTargets(node: DependencyGraph.Node) {
+        if (!node.triggerTargetInvalid) return
+        node.triggerTargetInvalid = false
+        for (triggerTarget in node.getDependencies(EDependencyType.TRIGGER)) {
+            updateTriggerTargets(triggerTarget)
+            val key = triggerTarget.key
+            if (key is InternalStateVariableReference<*, *>) {
+                update(key)
+            }
+        }
+    }
+
     @Synchronized
     private fun <T> update(engineValueKey: InternalStateVariableReference<*, T>): T {
         checkDisposed()
 
         val node = graph.getOrAddNode(engineValueKey) as DependencyGraph.InternalStateNode<*, T>
+        updateTriggerSource(node)
+        updateTriggerTargets(node)
         when (val state: ECacheEntryState = node.state) {
             ECacheEntryState.VALID -> {
                 return node.getValue().getValue()
@@ -59,17 +82,21 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
 
                     // This dependency has to be added here, because the node may be removed from the graph
                     // before the parent finishes evaluation and then the transitive dependencies are lost.
-                    evaluation.parent?.let { graph.getOrAddNode(it.dependencyKey).addDependency(node, EDependencyType.PULL) }
+                    evaluation.parent?.let { graph.getOrAddNode(it.dependencyKey).addDependency(node, EDependencyType.READ) }
 
-                    for (trigger in node.key.decl.getTriggers()) {
-                        update(InternalStateVariableReference(this, trigger))
-                    }
+//                    for (trigger in node.key.decl.getTriggers()) {
+//                        update(InternalStateVariableReference(this, trigger))
+//                    }
 
                     node.startValidation()
                     if (decl is IComputationDeclaration<*> && node is DependencyGraph.ComputationNode<*>) {
                         try {
                             val value = (decl as IComputationDeclaration<T>).invoke(IncrementalFunctionContext(evaluation, node) as IIncrementalFunctionContext<T>)
-                            (node as DependencyGraph.ComputationNode<T>).validationSuccessful(value, evaluation.dependencies)
+                            (node as DependencyGraph.ComputationNode<T>).validationSuccessful(
+                                value,
+                                evaluation.dependencies,
+                                evaluation.triggers,
+                            )
                             return value
                         } catch (e : Throwable) {
                             node.validationFailed(e, evaluation.dependencies)
@@ -77,11 +104,11 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
                         }
                     } else {
                         try {
-                            val earlierWriters = node.getDependencies(EDependencyType.PULL)
+                            val earlierWriters = node.getDependencies(EDependencyType.READ)
                                 .filterIsInstance<DependencyGraph.ComputationNode<*>>()
                                 .filter { it.state != ECacheEntryState.VALID }
                             for (earlierWriter in earlierWriters) {
-                                node.removeDependency(earlierWriter, EDependencyType.PULL)
+                                node.removeDependency(earlierWriter, EDependencyType.READ)
                                 update(earlierWriter.key)
                             }
                             node.state = ECacheEntryState.VALID
@@ -127,6 +154,10 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
     @Synchronized
     override fun modified(key: IStateVariableReference<*>) {
         if (key is InternalStateVariableReference<*, *> && key.engine == this) return
+        val evaluation = activeEvaluation
+        if (evaluation != null && evaluation.thread == getCurrentThread()) {
+            evaluation.triggers += key
+        }
         for (group in key.iterateGroups()) {
             val node = graph.getNode(group)
             if (node != null) {
@@ -184,10 +215,16 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
         override fun <T> writeStateVariable(ref: IInternalStateVariableReference<T, *>, value: T) {
             val targetNode = graph.getOrAddNode(ref) as DependencyGraph.InternalStateNode<T, *>
             targetNode.writeValue(value, node)
-            targetNode.addDependency(node, EDependencyType.PULL)
+            evaluation.triggers += ref
         }
         override fun <T> writeStateVariable(ref: IStateVariableDeclaration<T, *>, value: T) {
             writeStateVariable(InternalStateVariableReference(this@IncrementalEngine, ref), value)
+        }
+
+        override fun trigger(decl: IComputationDeclaration<*>) {
+            val ref = InternalStateVariableReference(this@IncrementalEngine, decl)
+            evaluation.triggers += ref
+            update(ref)
         }
     }
 
@@ -199,6 +236,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
 
         val thread: Any = getCurrentThread()
         val dependencies: MutableSet<IStateVariableReference<*>> = HashSet()
+        val triggers: MutableSet<IStateVariableReference<*>> = HashSet()
 
         fun getEvaluations(): List<Evaluation> {
             return (parent?.getEvaluations() ?: emptyList()) + this

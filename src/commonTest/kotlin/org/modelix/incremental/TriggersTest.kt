@@ -12,7 +12,7 @@ class TriggersTest {
 
     @AfterTest
     fun after() {
-        
+        engine.dispose()
     }
 
     @Test
@@ -24,6 +24,7 @@ class TriggersTest {
             externalState.setValue(input.getValue() * 10)
         }
         val readFromExternal = engine.incrementalFunction<Int>("readFromExternal", listOf(writeToExternal)) { context ->
+            context.trigger(writeToExternal)
             externalState.getValue() + 1
         }
 
