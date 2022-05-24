@@ -162,7 +162,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             if (triggerTargetInvalid) return
             triggerTargetInvalid = true
             for (dep in getReverseDependencies(EDependencyType.TRIGGER)) {
-                triggerTargetInvalidated()
+                dep.triggerTargetInvalidated()
             }
         }
 
@@ -170,7 +170,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             if (triggerSourceInvalid) return
             triggerSourceInvalid = true
             for (dep in getDependencies(EDependencyType.TRIGGER)) {
-                triggerSourceInvalidated()
+                dep.triggerSourceInvalidated()
             }
         }
     }
@@ -224,7 +224,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
          * if true, the engine will validate it directly after it got invalidated, without any external trigger
          */
         private var autoValidate: Boolean = false
-        private var anyReadAfterWrite = true
+        var anyReadAfterWrite = true
 
         override fun toString(): String = "internal[${key.decl}]"
 
@@ -240,7 +240,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
         fun isAutoValidate() = autoValidate
 
         fun getValue(): Optional<Out> {
-            require(!triggerSourceInvalid)
+//            require(!triggerSourceInvalid)
             anyReadAfterWrite = true
             if (!outputValue.hasValue() && inputValues.isNotEmpty()) {
                 outputValue = Optional.of(key.decl.type.reduce(inputValues.values))
@@ -328,18 +328,26 @@ class DependencyGraph(val engine: IncrementalEngine) {
         ) {
             require(state == ECacheEntryState.VALIDATING) { "There is no active validation for $key" }
             writeValue(newValue, this)
+            anyReadAfterWrite = true
             lastException = null
             setDependencies(this, newDependencies, EDependencyType.READ)
             setDependencies(this, newTriggers, EDependencyType.TRIGGER)
             state = ECacheEntryState.VALID
         }
 
-        fun validationFailed(exception: Throwable, newDependencies: Set<IStateVariableReference<*>>) {
+        fun validationFailed(
+            exception: Throwable,
+            newDependencies: Set<IStateVariableReference<*>>,
+            newTriggers: Set<IStateVariableReference<*>>,
+        ) {
             if (state != ECacheEntryState.VALIDATING) {
                 throw RuntimeException("There is no active validation for $key", exception)
             }
+            updateValue(Optional.empty(), this)
+            anyReadAfterWrite = true
             lastException = exception
             setDependencies(this, newDependencies, EDependencyType.READ)
+            setDependencies(this, newTriggers, EDependencyType.TRIGGER)
             state = ECacheEntryState.FAILED
         }
 

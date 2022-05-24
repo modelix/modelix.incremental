@@ -51,10 +51,11 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
         if (!node.triggerTargetInvalid) return
         node.triggerTargetInvalid = false
         for (triggerTarget in node.getDependencies(EDependencyType.TRIGGER).toList()) {
-            updateTriggerTargets(triggerTarget)
             val key = triggerTarget.key
             if (key is InternalStateVariableReference<*, *>) {
                 update(key)
+            } else {
+                updateTriggerTargets(triggerTarget)
             }
         }
     }
@@ -66,7 +67,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
         val node = graph.getOrAddNode(engineValueKey) as DependencyGraph.InternalStateNode<*, T>
         updateTriggerSource(node)
         updateTriggerTargets(node)
-        for (dep in node.getDependencies(EDependencyType.READ)) {
+        for (dep in node.getDependencies(EDependencyType.READ).toList()) {
             updateTriggerSource(dep)
         }
         if (node is DependencyGraph.ComputationNode<*>) {
@@ -103,7 +104,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
                                 )
                                 return value
                             } catch (e : Throwable) {
-                                node.validationFailed(e, evaluation.dependencies)
+                                node.validationFailed(e, evaluation.dependencies, evaluation.triggers)
                                 throw e
                             }
                         } else {
@@ -155,6 +156,9 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
         val evaluation = activeEvaluation ?: return
         if (evaluation.thread == getCurrentThread()) {
             evaluation.dependencies += key
+            if (key is InternalStateVariableReference<*, *> && key.engine == this && key.decl is IComputationDeclaration<*>) {
+                evaluation.triggers += key
+            }
         }
     }
 
