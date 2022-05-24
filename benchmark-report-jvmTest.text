@@ -1,14 +1,14 @@
 Benchmark                                                       Mode  Cnt      Score      Error  Units
-o.m.i.benchmark.RecursiveLargeSum10_000_000.incremental        thrpt   10  12609,370 ± 2051,104  ops/s
-o.m.i.benchmark.RecursiveLargeSum1_000.incremental             thrpt   10  10097,930 ± 5976,429  ops/s
-o.m.i.benchmarks.ManyDependencies.manyDependencies             thrpt   10     52,242 ±    2,713  ops/s
-o.m.i.benchmarks.ManyDependencies.nonIncremental               thrpt   10   8053,618 ± 1380,885  ops/s
-o.m.i.benchmarks.RecursiveSum10000.incremental                 thrpt   10   9641,443 ± 6709,463  ops/s
-o.m.i.benchmarks.RecursiveSum100000.incremental                thrpt   10  18622,776 ±  894,243  ops/s
-o.m.i.benchmarks.RecursiveSum1250.incremental                  thrpt   10   5660,823 ± 3257,627  ops/s
-o.m.i.benchmarks.RecursiveSum2500.incremental                  thrpt   10   5455,919 ± 3729,838  ops/s
-o.m.i.benchmarks.RecursiveSum5000.incremental                  thrpt   10   6887,855 ± 4136,562  ops/s
-o.m.i.benchmarks.RecursiveSumNonIncremental.nonIncremental     thrpt   10  18705,192 ± 1684,431  ops/s
-o.m.i.benchmarks.RecursiveSumNonIncremental.nonRecursive       thrpt   10  17594,011 ± 1543,416  ops/s
-o.m.i.benchmarks.RecursiveSumNonIncrementalInt.nonIncremental  thrpt   10  22475,056 ± 1044,871  ops/s
-o.m.i.benchmarks.RecursiveSumNonIncrementalInt.nonRecursive    thrpt   10  18058,855 ± 1669,004  ops/s
+o.m.i.benchmark.RecursiveLargeSum10_000_000.incremental        thrpt   10   2887,793 ±  634,360  ops/s
+o.m.i.benchmark.RecursiveLargeSum1_000.incremental             thrpt   10      0,073 ±    0,001  ops/s
+o.m.i.benchmarks.ManyDependencies.manyDependencies             thrpt   10     43,952 ±    2,693  ops/s
+o.m.i.benchmarks.ManyDependencies.nonIncremental               thrpt   10   9180,765 ± 2041,785  ops/s
+o.m.i.benchmarks.RecursiveSum10000.incremental                 thrpt   10      9,358 ±   11,753  ops/s
+o.m.i.benchmarks.RecursiveSum100000.incremental                thrpt   10   5654,880 ±  321,515  ops/s
+o.m.i.benchmarks.RecursiveSum1250.incremental                  thrpt   10     20,828 ±   42,645  ops/s
+o.m.i.benchmarks.RecursiveSum2500.incremental                  thrpt   10     20,557 ±   29,174  ops/s
+o.m.i.benchmarks.RecursiveSum5000.incremental                  thrpt   10     20,903 ±   34,637  ops/s
+o.m.i.benchmarks.RecursiveSumNonIncremental.nonIncremental     thrpt   10  21830,371 ±  778,985  ops/s
+o.m.i.benchmarks.RecursiveSumNonIncremental.nonRecursive       thrpt   10  17540,625 ± 2686,670  ops/s
+o.m.i.benchmarks.RecursiveSumNonIncrementalInt.nonIncremental  thrpt   10  22161,835 ± 1825,144  ops/s
+o.m.i.benchmarks.RecursiveSumNonIncrementalInt.nonRecursive    thrpt   10  19041,308 ± 1306,351  ops/s
