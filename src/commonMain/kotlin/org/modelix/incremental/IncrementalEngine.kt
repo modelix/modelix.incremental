@@ -65,71 +65,76 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
         checkDisposed()
 
         val node = graph.getOrAddNode(engineValueKey) as DependencyGraph.InternalStateNode<*, T>
-        updateTriggerSource(node)
-        updateTriggerTargets(node)
-        for (dep in node.getDependencies(EDependencyType.READ).toList()) {
-            updateTriggerSource(dep)
-        }
-        if (node is DependencyGraph.ComputationNode<*>) {
-            when (val state: ECacheEntryState = node.state) {
-                ECacheEntryState.VALID -> {
-                    return node.getValue().getValue()
-                }
-                ECacheEntryState.FAILED -> {
-                    throw node.lastException ?: RuntimeException()
-                }
-                else -> {
-                    val decl = engineValueKey.decl
-                    val evaluation = Evaluation(engineValueKey, activeEvaluation)
-                    evaluation.detectCycle()
-                    try {
-                        activeEvaluation = evaluation
+        try {
+            node.preventRemoval = true
+            updateTriggerSource(node)
+            updateTriggerTargets(node)
+            for (dep in node.getDependencies(EDependencyType.READ).toList()) {
+                updateTriggerSource(dep)
+            }
+            if (node is DependencyGraph.ComputationNode<*>) {
+                when (val state: ECacheEntryState = node.state) {
+                    ECacheEntryState.VALID -> {
+                        return node.getValue().getValue()
+                    }
+                    ECacheEntryState.FAILED -> {
+                        throw node.lastException ?: RuntimeException()
+                    }
+                    else -> {
+                        val decl = engineValueKey.decl
+                        val evaluation = Evaluation(engineValueKey, activeEvaluation)
+                        evaluation.detectCycle()
+                        try {
+                            activeEvaluation = evaluation
 
-                        // This dependency has to be added here, because the node may be removed from the graph
-                        // before the parent finishes evaluation and then the transitive dependencies are lost.
-                        evaluation.parent?.let { graph.getOrAddNode(it.dependencyKey).addDependency(node, EDependencyType.READ) }
+                            // This dependency has to be added here, because the node may be removed from the graph
+                            // before the parent finishes evaluation and then the transitive dependencies are lost.
+                            evaluation.parent?.let { graph.getOrAddNode(it.dependencyKey).addDependency(node, EDependencyType.READ) }
 
 //                    for (trigger in node.key.decl.getTriggers()) {
 //                        update(InternalStateVariableReference(this, trigger))
 //                    }
 
-                        node.startValidation()
-                        if (decl is IComputationDeclaration<*>) {
-                            try {
-                                val value = (decl as IComputationDeclaration<T>).invoke(IncrementalFunctionContext(evaluation, node) as IIncrementalFunctionContext<T>)
-                                (node as DependencyGraph.ComputationNode<T>).validationSuccessful(
-                                    value,
-                                    evaluation.dependencies,
-                                    evaluation.triggers,
-                                )
-                                return value
-                            } catch (e : Throwable) {
-                                node.validationFailed(e, evaluation.dependencies, evaluation.triggers)
-                                throw e
-                            }
-                        } else {
-                            try {
-                                val earlierWriters = node.getDependencies(EDependencyType.READ)
-                                    .filterIsInstance<DependencyGraph.ComputationNode<*>>()
-                                    .filter { it.state != ECacheEntryState.VALID }
-                                for (earlierWriter in earlierWriters) {
-                                    node.removeDependency(earlierWriter, EDependencyType.READ)
-                                    update(earlierWriter.key)
+                            node.startValidation()
+                            if (decl is IComputationDeclaration<*>) {
+                                try {
+                                    val value = (decl as IComputationDeclaration<T>).invoke(IncrementalFunctionContext(evaluation, node) as IIncrementalFunctionContext<T>)
+                                    (node as DependencyGraph.ComputationNode<T>).validationSuccessful(
+                                        value,
+                                        evaluation.dependencies,
+                                        evaluation.triggers,
+                                    )
+                                    return value
+                                } catch (e : Throwable) {
+                                    node.validationFailed(e, evaluation.dependencies, evaluation.triggers)
+                                    throw e
                                 }
-                                node.state = ECacheEntryState.VALID
-                                return node.readValue()
-                            } catch (e : Throwable) {
-                                node.state = ECacheEntryState.FAILED
-                                throw e
+                            } else {
+                                try {
+                                    val earlierWriters = node.getDependencies(EDependencyType.READ)
+                                        .filterIsInstance<DependencyGraph.ComputationNode<*>>()
+                                        .filter { it.state != ECacheEntryState.VALID }
+                                    for (earlierWriter in earlierWriters) {
+                                        node.removeDependency(earlierWriter, EDependencyType.READ)
+                                        update(earlierWriter.key)
+                                    }
+                                    node.state = ECacheEntryState.VALID
+                                    return node.readValue()
+                                } catch (e : Throwable) {
+                                    node.state = ECacheEntryState.FAILED
+                                    throw e
+                                }
                             }
+                        } finally {
+                            activeEvaluation = evaluation.parent
                         }
-                    } finally {
-                        activeEvaluation = evaluation.parent
                     }
                 }
+            } else {
+                return node.readValue()
             }
-        } else {
-            return node.readValue()
+        } finally {
+            node.preventRemoval = false
         }
     }
 
