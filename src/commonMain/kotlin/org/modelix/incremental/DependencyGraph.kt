@@ -28,7 +28,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
         if (n1.isAutoValidate()) return false
         //if (dependencies.any { it.state == ECacheEntryState.VALIDATING }) return
         if (n1.getReverseDependencies(EDependencyType.READ).any { it is ComputationNode<*> && it.state == ECacheEntryState.VALIDATING }) return false
-        if (n1.getDependencies(EDependencyType.TRIGGER).any { it !is ComputationNode<*> }) {
+        if (n1.getDependencies(EDependencyType.WRITE).isNotEmpty()) {
             // n1 is directly writing a state variable. The map with the values contains a reference to n1.
             return false
         }
@@ -133,11 +133,26 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
     open inner class Node(open val key: IStateVariableGroup) {
         private var disposed = false
-        var triggerTargetInvalid = true
-        var triggerSourceInvalid = true
+        private var reachable: Boolean? = null
+        var isRoot = false
+            set(value) {
+                require(value) { "Changing a node to non-root is not supported yet" }
+                field = value
+                reachable = null
+            }
+        var anyTransitiveReadInvalid = true
         private val reverseDependencies: Array<MutableSet<Node>> = EDependencyType.values().map { HashSet<Node>() }.toTypedArray()
         private val dependencies: Array<MutableSet<Node>> = EDependencyType.values().map { HashSet<Node>() }.toTypedArray()
         var preventRemoval = false
+
+        open fun isReachable(): Boolean {
+            var result = reachable
+            if (result == null) {
+                result = isRoot || getReverseDependencies(EDependencyType.READ).any { it.isReachable() }
+                reachable = result
+            }
+            return result
+        }
 
         fun dispose() {
             disposed = true
@@ -153,82 +168,68 @@ class DependencyGraph(val engine: IncrementalEngine) {
             checkNodeDisposed()
             if (dependency == this) return
             require(nodes.containsKey(dependency.key)) { "Not part of the graph: $dependency" }
-            dependencies[type.index] += dependency
-            if (type == EDependencyType.TRIGGER && dependency.triggerTargetInvalid) {
-                triggerTargetInvalid = true
-            }
+            dependencies[type.ordinal] += dependency
             dependency.addReverseDependency(this, type)
         }
 
         open fun removeDependency(dependency: Node, type: EDependencyType) {
             checkNodeDisposed()
-            dependencies[type.index] -= dependency
+            dependencies[type.ordinal] -= dependency
             dependency.removeReverseDependency(this, type)
         }
 
         fun getDependencies(type: EDependencyType): Set<Node> {
             checkNodeDisposed()
-            return dependencies[type.index]
+            return dependencies[type.ordinal]
         }
 
         fun getTransitiveDependencies(result: MutableSet<Node>, type: EDependencyType): Set<Node> {
             checkNodeDisposed()
             if (!result.contains(this)) {
-                result += dependencies[type.index]
-                dependencies[type.index].forEach { it.getTransitiveDependencies(result, type) }
+                result += dependencies[type.ordinal]
+                dependencies[type.ordinal].forEach { it.getTransitiveDependencies(result, type) }
             }
             return result
         }
+
         open fun addReverseDependency(dependency: Node, type: EDependencyType) {
             checkNodeDisposed()
-            reverseDependencies[type.index] += dependency
-            if (type == EDependencyType.TRIGGER && dependency.triggerSourceInvalid) {
-                triggerSourceInvalid = true
-            }
+            reverseDependencies[type.ordinal] += dependency
+            if (type == EDependencyType.READ) reachable = null
         }
 
         open fun removeReverseDependency(dependency: Node, type: EDependencyType) {
             checkNodeDisposed()
-            reverseDependencies[type.index] -= dependency
+            if (type == EDependencyType.READ) reachable = null
+            reverseDependencies[type.ordinal] -= dependency
         }
 
         fun getReverseDependencies(type: EDependencyType): Set<Node> {
             checkNodeDisposed()
-            return reverseDependencies[type.index]
+            return reverseDependencies[type.ordinal]
         }
 
-        fun isRoot() = reverseDependencies.isEmpty()
-
-        fun isConnected() = dependencies.isNotEmpty() || reverseDependencies.isNotEmpty()
-
-        open fun triggerTargetInvalidated() {
+        fun transitiveReadModified() {
             checkNodeDisposed()
-            if (triggerTargetInvalid) return
-            triggerTargetInvalid = true
-            for (dep in getReverseDependencies(EDependencyType.TRIGGER)) {
-                dep.triggerTargetInvalidated()
+            if (anyTransitiveReadInvalid) return
+            anyTransitiveReadInvalid = true
+            for (dep in getReverseDependencies(EDependencyType.READ)) {
+                dep.transitiveReadModified()
             }
         }
 
-        open fun triggerSourceInvalidated() {
+        open fun modified() {
             checkNodeDisposed()
-            if (triggerSourceInvalid) return
-            triggerSourceInvalid = true
-            for (dep in getDependencies(EDependencyType.TRIGGER)) {
-                dep.triggerSourceInvalidated()
+            for (dep in getReverseDependencies(EDependencyType.READ)) {
+                if (dep is ComputationNode<*>) dep.invalidate()
             }
+            transitiveReadModified()
         }
     }
 
     open inner class ExternalStateGroupNode(key: IStateVariableGroup) : Node(key) {
         private var parentGroup: ExternalStateGroupNode? = null
         override fun toString(): String = "group[$key]"
-
-        fun modified() {
-            getReverseDependencies(EDependencyType.READ)
-                .filterIsInstance<ComputationNode<*>>()
-                .forEach { it.invalidate() }
-        }
 
         fun getParentGroup(): ExternalStateGroupNode? {
             return parentGroup
@@ -269,9 +270,12 @@ class DependencyGraph(val engine: IncrementalEngine) {
          * if true, the engine will validate it directly after it got invalidated, without any external trigger
          */
         private var autoValidate: Boolean = false
-        var anyReadAfterWrite = true
 
         override fun toString(): String = "internal[${key.decl}]"
+
+        override fun isReachable(): Boolean {
+            return autoValidate || super.isReachable()
+        }
 
         fun setAutoValidate(newValue: Boolean) {
             if (newValue == autoValidate) return
@@ -285,8 +289,6 @@ class DependencyGraph(val engine: IncrementalEngine) {
         fun isAutoValidate() = autoValidate
 
         fun getValue(): Optional<Out> {
-//            require(!triggerSourceInvalid)
-            anyReadAfterWrite = true
             if (!outputValue.hasValue() && inputValues.isNotEmpty()) {
                 outputValue = Optional.of(key.decl.type.reduce(inputValues.values))
             }
@@ -294,7 +296,6 @@ class DependencyGraph(val engine: IncrementalEngine) {
         }
 
         fun readValue(): Out {
-            require(!triggerSourceInvalid)
             return getValue().getOrElse { key.decl.type.getDefault() }
         }
 
@@ -303,16 +304,15 @@ class DependencyGraph(val engine: IncrementalEngine) {
         }
 
         fun updateValue(value: Optional<In>, source: ComputationNode<*>) {
+            val oldValue = getValue()
             outputValue = Optional.empty()
             if (value.hasValue()) {
                 inputValues[source] = value.getValue()
             } else {
                 inputValues.remove(source)
             }
-            if (anyReadAfterWrite) {
-                anyReadAfterWrite = false
-                getReverseDependencies(EDependencyType.READ).filterIsInstance<ComputationNode<*>>()
-                    .forEach { it.invalidate() }
+            if (inputValues.size != 1 || oldValue != getValue()) {
+                modified()
                 DependencyTracking.modified(key)
                 if (autoValidate) autoValidationChannel.trySend(key)
             }
@@ -320,7 +320,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
         override fun removeReverseDependency(dependency: Node, type: EDependencyType) {
             super.removeReverseDependency(dependency, type)
-            if (dependency is ComputationNode<*> && type == EDependencyType.TRIGGER && inputValues.contains(dependency)) {
+            if (dependency is ComputationNode<*> && type == EDependencyType.WRITE && inputValues.contains(dependency)) {
                 updateValue(Optional.empty(), dependency)
             }
         }
@@ -357,6 +357,11 @@ class DependencyGraph(val engine: IncrementalEngine) {
         private var lastValidation: Long = 0L
         var lastException: Throwable? = null
 
+        override fun isReachable(): Boolean {
+            require(state != ECacheEntryState.INVALID) { "Validate $key first before checking the reachability" }
+            return super.isReachable()
+        }
+
         override fun toString(): String = "computation[${key.decl}]"
 
         fun getComputation(): IComputationDeclaration<E> = key.decl as IComputationDeclaration<E>
@@ -369,48 +374,39 @@ class DependencyGraph(val engine: IncrementalEngine) {
         fun validationSuccessful(
             newValue: E,
             newDependencies: Set<IStateVariableReference<*>>,
-            newTriggers: Set<IStateVariableReference<*>>,
+            newWrites: Set<IStateVariableReference<*>>,
         ) {
             require(state == ECacheEntryState.VALIDATING) { "There is no active validation for $key" }
             writeValue(newValue, this)
-            anyReadAfterWrite = true
             lastException = null
             setDependencies(this, newDependencies, EDependencyType.READ)
-            setDependencies(this, newTriggers, EDependencyType.TRIGGER)
+            setDependencies(this, newWrites, EDependencyType.WRITE)
             state = ECacheEntryState.VALID
         }
 
         fun validationFailed(
             exception: Throwable,
             newDependencies: Set<IStateVariableReference<*>>,
-            newTriggers: Set<IStateVariableReference<*>>,
+            newWrites: Set<IStateVariableReference<*>>,
         ) {
             if (state != ECacheEntryState.VALIDATING) {
                 throw RuntimeException("There is no active validation for $key", exception)
             }
             updateValue(Optional.empty(), this)
-            anyReadAfterWrite = true
             lastException = exception
             setDependencies(this, newDependencies, EDependencyType.READ)
-            setDependencies(this, newTriggers, EDependencyType.TRIGGER)
+            setDependencies(this, newWrites, EDependencyType.WRITE)
             state = ECacheEntryState.FAILED
         }
 
         fun invalidate() {
             if (state == ECacheEntryState.VALIDATING || state == ECacheEntryState.INVALID) return
             state = ECacheEntryState.INVALID
-            for (dep in getReverseDependencies(EDependencyType.TRIGGER)) {
-                dep.triggerTargetInvalidated()
-            }
-            for (dep in getDependencies(EDependencyType.TRIGGER)) {
-                dep.triggerSourceInvalidated()
-            }
         }
     }
 }
 
-enum class EDependencyType(val index: Int) {
-    READ(0),
-    TRIGGER(1)
+enum class EDependencyType {
+    READ,
+    WRITE,
 }
-
