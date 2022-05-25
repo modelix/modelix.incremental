@@ -60,6 +60,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
             activeEvaluation = evaluation
 
             if (node.anyTransitiveReadInvalid) {
+                node.anyTransitiveReadInvalid = false
                 for (dep in node.getDependencies(EDependencyType.READ).toList()) {
                     val depKey = dep.key
                     if (dep.anyTransitiveReadInvalid && depKey is InternalStateVariableReference<*, *>) {
@@ -69,6 +70,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
             }
             for (dep in node.getReverseDependencies(EDependencyType.WRITE).toList()) {
                 updateCallers(dep)
+                node.anyTransitiveCallInvalid = false
             }
             if (node is DependencyGraph.ComputationNode<*>) {
                 when (val state: ECacheEntryState = node.state) {
@@ -95,11 +97,11 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
                                 (node as DependencyGraph.ComputationNode<T>).validationSuccessful(
                                     value,
                                     evaluation.readDependencies,
-                                    evaluation.triggerDependencies,
+                                    evaluation.writeDependencies,
                                 )
                                 return value
                             } catch (e : Throwable) {
-                                node.validationFailed(e, evaluation.readDependencies, evaluation.triggerDependencies)
+                                node.validationFailed(e, evaluation.readDependencies, evaluation.writeDependencies)
                                 throw e
                             }
                         } else {
@@ -163,7 +165,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
         if (key is InternalStateVariableReference<*, *> && key.engine == this) return
         val evaluation = activeEvaluation
         if (evaluation != null && evaluation.thread == getCurrentThread()) {
-            evaluation.triggerDependencies += key
+            evaluation.writeDependencies += key
         }
         for (group in key.iterateGroups()) {
             val node = graph.getNode(group) as DependencyGraph.ExternalStateGroupNode?
@@ -222,16 +224,14 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
         override fun <T> writeStateVariable(ref: IInternalStateVariableReference<T, *>, value: T) {
             val targetNode = graph.getOrAddNode(ref) as DependencyGraph.InternalStateNode<T, *>
             targetNode.writeValue(value, node)
-            evaluation.triggerDependencies += ref
+            evaluation.writeDependencies += ref
         }
         override fun <T> writeStateVariable(ref: IStateVariableDeclaration<T, *>, value: T) {
             writeStateVariable(InternalStateVariableReference(this@IncrementalEngine, ref), value)
         }
 
         override fun trigger(decl: IComputationDeclaration<*>) {
-            val ref = InternalStateVariableReference(this@IncrementalEngine, decl)
-            evaluation.triggerDependencies += ref
-            update(ref)
+            TODO("deprectated")
         }
     }
 
@@ -243,7 +243,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
 
         val thread: Any = getCurrentThread()
         val readDependencies: MutableSet<IStateVariableReference<*>> = HashSet()
-        val triggerDependencies: MutableSet<IStateVariableReference<*>> = HashSet()
+        val writeDependencies: MutableSet<IStateVariableReference<*>> = HashSet()
 
         fun getEvaluations(): List<Evaluation> {
             return (parent?.getEvaluations() ?: emptyList()) + this

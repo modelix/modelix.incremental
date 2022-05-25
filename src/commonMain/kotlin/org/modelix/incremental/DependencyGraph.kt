@@ -173,6 +173,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             dependencies[type.ordinal] += dependency
             dependency.addReverseDependency(this, type)
             updateAnyTransitiveWrite()
+            if (dependency.anyTransitiveReadInvalid) transitiveReadModified()
         }
 
         fun updateAnyTransitiveWrite() {
@@ -224,10 +225,9 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
         fun transitiveReadModified() {
             checkNodeDisposed()
-            if (anyTransitiveReadInvalid) return
             anyTransitiveReadInvalid = true
             for (dep in getReverseDependencies(EDependencyType.READ)) {
-                dep.transitiveReadModified()
+                if (!dep.anyTransitiveReadInvalid) dep.transitiveReadModified()
             }
         }
 
@@ -241,11 +241,10 @@ class DependencyGraph(val engine: IncrementalEngine) {
         }
 
         fun transitiveCallModified() {
-            if (!anyTransitiveWrite) return
-            if (anyTransitiveCallInvalid) return
+            //if (!anyTransitiveWrite) return
             anyTransitiveCallInvalid = true
             for (dep in getDependencies(EDependencyType.READ)) {
-                dep.transitiveCallModified()
+                if (!dep.anyTransitiveCallInvalid) dep.transitiveCallModified()
             }
         }
     }
@@ -405,6 +404,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             setDependencies(this, newDependencies, EDependencyType.READ)
             setDependencies(this, newWrites, EDependencyType.WRITE)
             state = ECacheEntryState.VALID
+            anyTransitiveReadInvalid = false
         }
 
         fun validationFailed(
@@ -420,6 +420,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             setDependencies(this, newDependencies, EDependencyType.READ)
             setDependencies(this, newWrites, EDependencyType.WRITE)
             state = ECacheEntryState.FAILED
+            anyTransitiveReadInvalid = false
         }
 
         fun invalidate() {
