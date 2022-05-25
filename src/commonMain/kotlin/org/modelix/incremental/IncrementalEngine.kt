@@ -52,7 +52,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
         checkDisposed()
 
         val node = graph.getOrAddNode(engineValueKey) as DependencyGraph.InternalStateNode<*, T>
-        val evaluation = Evaluation(engineValueKey, activeEvaluation)
+        val evaluation = Evaluation(engineValueKey, activeEvaluation, node)
         try {
             node.preventRemoval = true
             evaluation.detectCycle()
@@ -60,11 +60,18 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
             activeEvaluation = evaluation
 
             if (node.isAnyTransitiveReadInvalid()) {
-                for (dep in node.getDependencies(EDependencyType.READ).toList()) {
-                    val depKey = dep.key
-                    if (dep.isAnyTransitiveReadInvalid() && depKey is InternalStateVariableReference<*, *>) {
-                        update(depKey)
+                val processed = HashSet<DependencyGraph.Node>()
+                l1@while (true) {
+                    l2@for (dep in node.getDependencies(EDependencyType.READ)) {
+                        if (processed.contains(dep)) continue@l2
+                        processed += dep
+                        val depKey = dep.key
+                        if (dep.isAnyTransitiveReadInvalid() && depKey is InternalStateVariableReference<*, *>) {
+                            update(depKey)
+                        }
+                        continue@l1
                     }
+                    break@l1
                 }
             }
             for (dep in node.getReverseDependencies(EDependencyType.WRITE).toList()) {
@@ -83,7 +90,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
                         val decl = engineValueKey.decl
                         // This dependency has to be added here, because the node may be removed from the graph
                         // before the parent finishes evaluation and then the transitive dependencies are lost.
-                        evaluation.parent?.let { graph.getOrAddNode(it.dependencyKey).addDependency(node, EDependencyType.READ) }
+                        evaluation.parent?.node?.addDependency(node, EDependencyType.READ)
 
 //                    for (trigger in node.key.decl.getTriggers()) {
 //                        update(InternalStateVariableReference(this, trigger))
@@ -237,6 +244,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
     private class Evaluation(
         val dependencyKey: InternalStateVariableReference<*, *>,
         val parent: Evaluation?,
+        val node: DependencyGraph.Node,
     ) : AbstractCoroutineContextElement(Evaluation) {
         companion object Key : CoroutineContext.Key<Evaluation>
 

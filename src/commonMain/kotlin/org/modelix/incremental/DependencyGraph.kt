@@ -36,6 +36,8 @@ class DependencyGraph(val engine: IncrementalEngine) {
             return false
         }
 
+        if (n1.getReverseDependencies(EDependencyType.READ).any { it.preventRemoval }) return false
+
 
 
         val readReverseDependencies = n1.getReverseDependencies(EDependencyType.READ).toList()
@@ -154,9 +156,14 @@ class DependencyGraph(val engine: IncrementalEngine) {
         private val dependencies: Array<MutableSet<Node>> = EDependencyType.values().map { HashSet<Node>() }.toTypedArray()
         var preventRemoval = false
 
-        fun isAnyTransitiveReadInvalid() = anyTransitiveReadInvalid
+        fun isAnyTransitiveReadInvalid(): Boolean {
+            checkNodeDisposed()
+            return anyTransitiveReadInvalid
+        }
 
         fun resetAnyTransitiveReadInvalid() {
+            checkNodeDisposed()
+            runAssertions()
             if (!anyTransitiveReadInvalid) return
             for (dependency in getDependencies(EDependencyType.READ)) {
                 when(dependency) {
@@ -176,6 +183,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
         }
 
         open fun runAssertions() {
+            checkNodeDisposed()
             if (getDependencies(EDependencyType.READ).any { it.anyTransitiveReadInvalid }) {
                 require(anyTransitiveReadInvalid) {
                     val invalid = getDependencies(EDependencyType.READ).filter { it.anyTransitiveReadInvalid }.map { it.key }
@@ -191,6 +199,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
         }
 
         open fun isReachable(): Boolean {
+            checkNodeDisposed()
             var result = reachable
             if (result == null) {
                 result = isRoot || getReverseDependencies(EDependencyType.READ).any { it.isReachable() }
@@ -221,6 +230,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
         }
 
         fun updateAnyTransitiveWrite() {
+            checkNodeDisposed()
             val oldValue = anyTransitiveWrite
             anyTransitiveWrite = getDependencies(EDependencyType.WRITE).isNotEmpty() ||
                     getDependencies(EDependencyType.READ).any { it.anyTransitiveWrite }
@@ -276,12 +286,14 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
         fun transitiveReadModified() {
             checkNodeDisposed()
-            anyTransitiveReadInvalid = true
+            anyTransitiveReadInvalid = canBeValidated()
             for (dep in getReverseDependencies(EDependencyType.READ)) {
                 if (!dep.anyTransitiveReadInvalid) dep.transitiveReadModified()
             }
             runAssertions()
         }
+
+        open fun canBeValidated() = false
 
         open fun modified() {
             checkNodeDisposed()
@@ -294,6 +306,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
         }
 
         fun transitiveCallModified() {
+            checkNodeDisposed()
             anyTransitiveCallInvalid = true
             for (dep in getDependencies(EDependencyType.READ)) {
                 if (!dep.anyTransitiveCallInvalid) dep.transitiveCallModified()
@@ -417,6 +430,8 @@ class DependencyGraph(val engine: IncrementalEngine) {
             }
         private var lastValidation: Long = 0L
         var lastException: Throwable? = null
+
+        override fun canBeValidated() = true
 
         override fun isReachable(): Boolean {
             require(state != ECacheEntryState.INVALID) { "Validate $key first before checking the reachability" }
