@@ -263,6 +263,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
                     val activeEvaluations = parent!!.getEvaluations()
                     val cycleStart = activeEvaluations.indexOfLast { it.dependencyKey == dependencyKey }
                     if (cycleStart != -1) {
+                        parent.readDependencies -= this.dependencyKey
                         throw DependencyCycleException(activeEvaluations.drop(cycleStart).map { it.dependencyKey.decl })
                     }
                 }
