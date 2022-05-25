@@ -29,14 +29,14 @@ class DependencyGraph(val engine: IncrementalEngine) {
         if (n1.isAutoValidate()) return false
         if (n1 is ComputationNode && n1.state != ECacheEntryState.VALID) return false
         //if (dependencies.any { it.state == ECacheEntryState.VALIDATING }) return
-        if (n1.getReverseDependencies(EDependencyType.READ).any { it is ComputationNode<*> && it.state != ECacheEntryState.VALID }) return false
-        if (n1.getDependencies(EDependencyType.READ).any { it is ComputationNode<*> && it.state != ECacheEntryState.VALID }) return false
+        if (n1.getReverseDependencies(EDependencyType.READ).any { it is ComputationNode<*> && it.state == ECacheEntryState.VALIDATING }) return false
+        //if (n1.getDependencies(EDependencyType.READ).any { it is ComputationNode<*> && it.state != ECacheEntryState.VALID }) return false
         if (n1.getDependencies(EDependencyType.WRITE).isNotEmpty()) {
             // n1 is directly writing a state variable. The map with the values contains a reference to n1.
             return false
         }
 
-        if (n1.getReverseDependencies(EDependencyType.READ).any { it.preventRemoval }) return false
+        //if (n1.getReverseDependencies(EDependencyType.READ).any { it.preventRemoval }) return false
 
 
 
