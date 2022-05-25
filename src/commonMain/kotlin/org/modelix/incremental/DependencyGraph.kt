@@ -141,6 +141,8 @@ class DependencyGraph(val engine: IncrementalEngine) {
                 reachable = null
             }
         var anyTransitiveReadInvalid = true
+        var anyTransitiveWrite = false
+        var anyTransitiveCallInvalid = true
         private val reverseDependencies: Array<MutableSet<Node>> = EDependencyType.values().map { HashSet<Node>() }.toTypedArray()
         private val dependencies: Array<MutableSet<Node>> = EDependencyType.values().map { HashSet<Node>() }.toTypedArray()
         var preventRemoval = false
@@ -170,12 +172,23 @@ class DependencyGraph(val engine: IncrementalEngine) {
             require(nodes.containsKey(dependency.key)) { "Not part of the graph: $dependency" }
             dependencies[type.ordinal] += dependency
             dependency.addReverseDependency(this, type)
+            updateAnyTransitiveWrite()
+        }
+
+        fun updateAnyTransitiveWrite() {
+            val oldValue = anyTransitiveWrite
+            anyTransitiveWrite = getDependencies(EDependencyType.WRITE).isNotEmpty() ||
+                    getDependencies(EDependencyType.READ).any { it.anyTransitiveWrite }
+            if (anyTransitiveWrite != oldValue) {
+                getReverseDependencies(EDependencyType.READ).forEach { it.updateAnyTransitiveWrite() }
+            }
         }
 
         open fun removeDependency(dependency: Node, type: EDependencyType) {
             checkNodeDisposed()
             dependencies[type.ordinal] -= dependency
             dependency.removeReverseDependency(this, type)
+            updateAnyTransitiveWrite()
         }
 
         fun getDependencies(type: EDependencyType): Set<Node> {
@@ -224,6 +237,16 @@ class DependencyGraph(val engine: IncrementalEngine) {
                 if (dep is ComputationNode<*>) dep.invalidate()
             }
             transitiveReadModified()
+            transitiveCallModified()
+        }
+
+        fun transitiveCallModified() {
+            if (!anyTransitiveWrite) return
+            if (anyTransitiveCallInvalid) return
+            anyTransitiveCallInvalid = true
+            for (dep in getDependencies(EDependencyType.READ)) {
+                dep.transitiveCallModified()
+            }
         }
     }
 

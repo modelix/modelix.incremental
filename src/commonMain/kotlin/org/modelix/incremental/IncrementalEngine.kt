@@ -38,6 +38,15 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
         return keys.map { update(it) }
     }
 
+    private fun updateCallers(node: DependencyGraph.Node) {
+        if (!node.anyTransitiveCallInvalid) return
+        val callers = node.getReverseDependencies(EDependencyType.READ).filter { it.anyTransitiveCallInvalid }
+        for (caller in callers) {
+            updateCallers(caller)
+        }
+        update(node.key as InternalStateVariableReference<*, *>)
+    }
+
     @Synchronized
     private fun <T> update(engineValueKey: InternalStateVariableReference<*, T>): T {
         checkDisposed()
@@ -57,6 +66,9 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
                         update(depKey)
                     }
                 }
+            }
+            for (dep in node.getReverseDependencies(EDependencyType.WRITE).toList()) {
+                updateCallers(dep)
             }
             if (node is DependencyGraph.ComputationNode<*>) {
                 when (val state: ECacheEntryState = node.state) {
