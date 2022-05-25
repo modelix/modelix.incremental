@@ -129,6 +129,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
                     }
                 }
             } else {
+                node.resetAnyTransitiveReadInvalid()
                 return node.readValue()
             }
         } finally {

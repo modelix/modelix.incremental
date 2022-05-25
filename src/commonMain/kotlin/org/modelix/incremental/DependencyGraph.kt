@@ -167,7 +167,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             if (!anyTransitiveReadInvalid) return
             for (dependency in getDependencies(EDependencyType.READ)) {
                 when(dependency) {
-                    is ComputationNode<*> -> {
+                    is ComputationNode<*>, is InternalStateNode<*, *> -> {
                         require(!dependency.isAnyTransitiveReadInvalid()) {
                             "Cannot reset $key. ${dependency.key} is still invalid."
                         }
@@ -347,6 +347,8 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
         override fun toString(): String = "internal[${key.decl}]"
 
+        override fun canBeValidated() = true
+
         override fun isReachable(): Boolean {
             return autoValidate || super.isReachable()
         }
@@ -430,8 +432,6 @@ class DependencyGraph(val engine: IncrementalEngine) {
             }
         private var lastValidation: Long = 0L
         var lastException: Throwable? = null
-
-        override fun canBeValidated() = true
 
         override fun isReachable(): Boolean {
             require(state != ECacheEntryState.INVALID) { "Validate $key first before checking the reachability" }
