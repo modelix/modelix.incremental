@@ -51,4 +51,8 @@ data class InternalStateVariableReference<in In, out Out>(val engine: IIncrement
     override fun read(): Out {
         return engine.readStateVariable(decl)
     }
+
+    override fun toString(): String {
+        return "state[$decl]"
+    }
 }

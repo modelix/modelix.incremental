@@ -59,11 +59,10 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
             if (evaluation.parent == null) node.isRoot = true
             activeEvaluation = evaluation
 
-            if (node.anyTransitiveReadInvalid) {
-                node.anyTransitiveReadInvalid = false
+            if (node.isAnyTransitiveReadInvalid()) {
                 for (dep in node.getDependencies(EDependencyType.READ).toList()) {
                     val depKey = dep.key
-                    if (dep.anyTransitiveReadInvalid && depKey is InternalStateVariableReference<*, *>) {
+                    if (dep.isAnyTransitiveReadInvalid() && depKey is InternalStateVariableReference<*, *>) {
                         update(depKey)
                     }
                 }

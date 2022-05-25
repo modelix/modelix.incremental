@@ -24,23 +24,30 @@ class DependencyGraph(val engine: IncrementalEngine) {
     fun getSize() = nodes.size
 
     private fun tryRemoveNode(n1: InternalStateNode<*, *>): Boolean {
+        n1.runAssertions()
         if (n1.preventRemoval) return false
         if (n1.isAutoValidate()) return false
+        if (n1 is ComputationNode && n1.state != ECacheEntryState.VALID) return false
         //if (dependencies.any { it.state == ECacheEntryState.VALIDATING }) return
-        if (n1.getReverseDependencies(EDependencyType.READ).any { it is ComputationNode<*> && it.state == ECacheEntryState.VALIDATING }) return false
+        if (n1.getReverseDependencies(EDependencyType.READ).any { it is ComputationNode<*> && it.state != ECacheEntryState.VALID }) return false
+        if (n1.getDependencies(EDependencyType.READ).any { it is ComputationNode<*> && it.state != ECacheEntryState.VALID }) return false
         if (n1.getDependencies(EDependencyType.WRITE).isNotEmpty()) {
             // n1 is directly writing a state variable. The map with the values contains a reference to n1.
             return false
         }
 
+
+
         val readReverseDependencies = n1.getReverseDependencies(EDependencyType.READ).toList()
 
         // replace n2->n1->n0 with n2->n0
         for (dtype in EDependencyType.values()) {
+            n1.runAssertions()
             val dependencies = n1.getDependencies(dtype).toList()
             val reverseDependencies = n1.getReverseDependencies(dtype).toList()
             dependencies.forEach { n0 -> n1.removeDependency(n0, dtype) }
             for (n2 in reverseDependencies) {
+                n2.runAssertions()
                 n2.removeDependency(n1, dtype)
                 dependencies.forEach { n0 -> n2.addDependency(n0, dtype) }
                 //println("Merged $n1 into $n2")
@@ -140,12 +147,48 @@ class DependencyGraph(val engine: IncrementalEngine) {
                 field = value
                 reachable = null
             }
-        var anyTransitiveReadInvalid = true
+        private var anyTransitiveReadInvalid = false
         var anyTransitiveWrite = false
         var anyTransitiveCallInvalid = true
         private val reverseDependencies: Array<MutableSet<Node>> = EDependencyType.values().map { HashSet<Node>() }.toTypedArray()
         private val dependencies: Array<MutableSet<Node>> = EDependencyType.values().map { HashSet<Node>() }.toTypedArray()
         var preventRemoval = false
+
+        fun isAnyTransitiveReadInvalid() = anyTransitiveReadInvalid
+
+        fun resetAnyTransitiveReadInvalid() {
+            if (!anyTransitiveReadInvalid) return
+            for (dependency in getDependencies(EDependencyType.READ)) {
+                when(dependency) {
+                    is ComputationNode<*> -> {
+                        require(!dependency.isAnyTransitiveReadInvalid()) {
+                            "Cannot reset $key. ${dependency.key} is still invalid."
+                        }
+                    }
+                    is ExternalStateGroupNode -> {
+                        dependency.resetAnyTransitiveReadInvalid()
+                    }
+                    else -> TODO("Not handled: $dependency")
+                }
+            }
+            anyTransitiveReadInvalid = false
+            runAssertions()
+        }
+
+        open fun runAssertions() {
+            if (getDependencies(EDependencyType.READ).any { it.anyTransitiveReadInvalid }) {
+                require(anyTransitiveReadInvalid) {
+                    val invalid = getDependencies(EDependencyType.READ).filter { it.anyTransitiveReadInvalid }.map { it.key }
+                    "$key is not marked as transitive invalid, but $invalid is."
+                }
+            }
+            if (anyTransitiveReadInvalid) {
+                val wrong = getReverseDependencies(EDependencyType.READ).filter { !it.anyTransitiveReadInvalid }
+                require(wrong.isEmpty()) {
+                    "$key is marked as transitive invalid, but $wrong isn't"
+                }
+            }
+        }
 
         open fun isReachable(): Boolean {
             var result = reachable
@@ -174,6 +217,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             dependency.addReverseDependency(this, type)
             updateAnyTransitiveWrite()
             if (dependency.anyTransitiveReadInvalid) transitiveReadModified()
+            runAssertions()
         }
 
         fun updateAnyTransitiveWrite() {
@@ -190,6 +234,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             dependencies[type.ordinal] -= dependency
             dependency.removeReverseDependency(this, type)
             updateAnyTransitiveWrite()
+            runAssertions()
         }
 
         fun getDependencies(type: EDependencyType): Set<Node> {
@@ -206,16 +251,22 @@ class DependencyGraph(val engine: IncrementalEngine) {
             return result
         }
 
-        open fun addReverseDependency(dependency: Node, type: EDependencyType) {
+        private fun addReverseDependency(dependency: Node, type: EDependencyType) {
             checkNodeDisposed()
             reverseDependencies[type.ordinal] += dependency
+
             if (type == EDependencyType.READ) reachable = null
         }
 
-        open fun removeReverseDependency(dependency: Node, type: EDependencyType) {
+        private fun removeReverseDependency(dependency: Node, type: EDependencyType) {
             checkNodeDisposed()
             if (type == EDependencyType.READ) reachable = null
             reverseDependencies[type.ordinal] -= dependency
+
+            afterReverseDependencyRemoved(dependency, type)
+        }
+
+        protected open fun afterReverseDependencyRemoved(dependency: Node, type: EDependencyType) {
         }
 
         fun getReverseDependencies(type: EDependencyType): Set<Node> {
@@ -229,6 +280,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             for (dep in getReverseDependencies(EDependencyType.READ)) {
                 if (!dep.anyTransitiveReadInvalid) dep.transitiveReadModified()
             }
+            runAssertions()
         }
 
         open fun modified() {
@@ -238,45 +290,32 @@ class DependencyGraph(val engine: IncrementalEngine) {
             }
             transitiveReadModified()
             transitiveCallModified()
+            runAssertions()
         }
 
         fun transitiveCallModified() {
-            //if (!anyTransitiveWrite) return
             anyTransitiveCallInvalid = true
             for (dep in getDependencies(EDependencyType.READ)) {
                 if (!dep.anyTransitiveCallInvalid) dep.transitiveCallModified()
             }
+            runAssertions()
         }
     }
 
     open inner class ExternalStateGroupNode(key: IStateVariableGroup) : Node(key) {
-        private var parentGroup: ExternalStateGroupNode? = null
         override fun toString(): String = "group[$key]"
 
         fun getParentGroup(): ExternalStateGroupNode? {
-            return parentGroup
-        }
-
-        override fun addReverseDependency(dependency: Node, type: EDependencyType) {
-            super.addReverseDependency(dependency, type)
-            if (dependency is ExternalStateGroupNode) {
-                parentGroup = dependency
-            }
-        }
-
-        override fun removeReverseDependency(dependency: Node, type: EDependencyType) {
-            super.removeReverseDependency(dependency, type)
-            if (dependency == parentGroup) {
-                parentGroup = null
-            }
+            return getReverseDependencies(EDependencyType.READ).filterIsInstance<ExternalStateGroupNode>().firstOrNull()
         }
 
         fun removeIfUnused() {
+            val parentGroup = getParentGroup()
             if (parentGroup == null) return
             if (getReverseDependencies(EDependencyType.READ).size != 1) return
             if (getReverseDependencies(EDependencyType.READ).first() != parentGroup) return
             if (getDependencies(EDependencyType.READ).isNotEmpty()) return
-            parentGroup!!.removeDependency(this, EDependencyType.READ)
+            parentGroup.removeDependency(this, EDependencyType.READ)
             nodes.remove(key)
         }
     }
@@ -340,8 +379,8 @@ class DependencyGraph(val engine: IncrementalEngine) {
             }
         }
 
-        override fun removeReverseDependency(dependency: Node, type: EDependencyType) {
-            super.removeReverseDependency(dependency, type)
+        override fun afterReverseDependencyRemoved(dependency: Node, type: EDependencyType) {
+            super.afterReverseDependencyRemoved(dependency, type)
             if (dependency is ComputationNode<*> && type == EDependencyType.WRITE && inputValues.contains(dependency)) {
                 updateValue(Optional.empty(), dependency)
             }
@@ -404,7 +443,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             setDependencies(this, newDependencies, EDependencyType.READ)
             setDependencies(this, newWrites, EDependencyType.WRITE)
             state = ECacheEntryState.VALID
-            anyTransitiveReadInvalid = false
+            resetAnyTransitiveReadInvalid()
         }
 
         fun validationFailed(
@@ -420,7 +459,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             setDependencies(this, newDependencies, EDependencyType.READ)
             setDependencies(this, newWrites, EDependencyType.WRITE)
             state = ECacheEntryState.FAILED
-            anyTransitiveReadInvalid = false
+            resetAnyTransitiveReadInvalid()
         }
 
         fun invalidate() {

@@ -161,8 +161,7 @@ class IncrementalMathTest {
 
     @OptIn(ExperimentalTime::class)
     fun incrementalX(graphSizeLimit: Int) = runTestAndCleanup {
-        engine.dispose()
-        engine = IncrementalEngine((graphSizeLimit))
+        val engine = IncrementalEngine((graphSizeLimit))
         val input = TrackableList((0L..1000L).toMutableList())
 
         var sum: ((Int, Int) -> IncrementalFunctionCall2<Long, Int, Int>)? = null
@@ -192,6 +191,7 @@ class IncrementalMathTest {
             assertEquals(500500L + 13 + 7 + 23, input.asSequence().sum())
         })
         println("Graph size: ${engine.getGraphSize()}")
+        engine.dispose()
     }
 
     @OptIn(ExperimentalTime::class)
