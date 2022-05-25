@@ -20,11 +20,11 @@ class TriggersTest {
         val externalState = TrackableValue(0)
         val input = TrackableValue(1)
 
-        val writeToExternal = incrementalFunction<Unit>("writeToExternal") { context ->
+        val writeToExternal = engine.incrementalFunction<Unit>("writeToExternal") { context ->
             externalState.setValue(input.getValue() * 10)
         }
-        val readFromExternal = engine.incrementalFunction<Int>("readFromExternal", listOf(writeToExternal)) { context ->
-            context.trigger(writeToExternal)
+        val readFromExternal = engine.incrementalFunction<Int>("readFromExternal") { context ->
+            writeToExternal()
             externalState.getValue() + 1
         }
 
