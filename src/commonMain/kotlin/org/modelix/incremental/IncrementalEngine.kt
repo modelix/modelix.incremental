@@ -18,12 +18,14 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
         DependencyTracking.registerListener(this)
     }
 
+    @Synchronized
     fun getGraphSize() = graph.getSize()
 
     private fun checkDisposed() {
         if (disposed) throw IllegalStateException("engine is disposed")
     }
 
+    @Synchronized
     override fun <T> readStateVariable(call: IStateVariableDeclaration<*, T>): T {
         checkDisposed()
         val engineValueKey = InternalStateVariableReference(this, call)
@@ -31,6 +33,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
         return update(engineValueKey)
     }
 
+    @Synchronized
     override fun <T> readStateVariables(calls: List<IStateVariableDeclaration<*, T>>): List<T> {
         checkDisposed()
         val keys = calls.map { InternalStateVariableReference(this, it) }
@@ -39,12 +42,15 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
     }
 
     private fun updateCallers(node: DependencyGraph.Node) {
-        if (!node.isAnyTransitiveCallInvalid()) return
-        val callers = node.getReverseDependencies(EDependencyType.READ).filter { it.isAnyTransitiveCallInvalid() }
-        for (caller in callers) {
-            updateCallers(caller)
+        if (node.isAnyTransitiveCallInvalid()) {
+            val callers = node.getReverseDependencies(EDependencyType.READ).filter { it.isAnyTransitiveCallInvalid() }
+            for (caller in callers) {
+                updateCallers(caller)
+            }
         }
-        update(node.key as InternalStateVariableReference<*, *>)
+        if (node.isInvalid()) {
+            update(node.key as InternalStateVariableReference<*, *>)
+        }
     }
 
     @Synchronized

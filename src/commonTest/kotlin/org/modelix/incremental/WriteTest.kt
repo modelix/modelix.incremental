@@ -104,7 +104,7 @@ class WriteTest {
         }
 
         assertEquals(0L, avg())
-        writeFunction1()
+        writeFunction1() // TODO additional test with indirect call of write1
         assertEquals(110L, avg())
         writeFunction2()
         assertEquals(155L, avg())

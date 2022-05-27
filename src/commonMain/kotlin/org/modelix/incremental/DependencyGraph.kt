@@ -309,7 +309,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             return reverseDependencies[type.ordinal]
         }
 
-        private fun transitiveReadModified() {
+        fun transitiveReadModified() {
             checkNodeDisposed()
             anyTransitiveReadInvalid = canBeValidated()
             for (dep in getReverseDependencies(EDependencyType.READ)) {
@@ -339,6 +339,9 @@ class DependencyGraph(val engine: IncrementalEngine) {
             if (oldValue != newValue) {
                 for (dep in getDependencies(EDependencyType.READ)) {
                     if (!dep.anyTransitiveCallInvalid) dep.updateAnyTransitiveCallInvalid()
+                }
+                for (dep in getDependencies(EDependencyType.WRITE)) {
+                    dep.transitiveReadModified()
                 }
             }
         }
@@ -515,6 +518,11 @@ class DependencyGraph(val engine: IncrementalEngine) {
         fun invalidate() {
             if (state == ECacheEntryState.VALIDATING || state == ECacheEntryState.INVALID) return
             state = ECacheEntryState.INVALID
+            for (dep in getDependencies(EDependencyType.WRITE)) {
+                dep.transitiveReadModified()
+            }
+            transitiveReadModified()
+            updateAnyTransitiveCallInvalid()
         }
     }
 }
