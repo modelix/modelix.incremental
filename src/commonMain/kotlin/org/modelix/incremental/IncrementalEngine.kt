@@ -39,8 +39,8 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
     }
 
     private fun updateCallers(node: DependencyGraph.Node) {
-        if (!node.anyTransitiveCallInvalid) return
-        val callers = node.getReverseDependencies(EDependencyType.READ).filter { it.anyTransitiveCallInvalid }
+        if (!node.isAnyTransitiveCallInvalid()) return
+        val callers = node.getReverseDependencies(EDependencyType.READ).filter { it.isAnyTransitiveCallInvalid() }
         for (caller in callers) {
             updateCallers(caller)
         }
@@ -76,7 +76,6 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
             }
             for (dep in node.getReverseDependencies(EDependencyType.WRITE).toList()) {
                 updateCallers(dep)
-                node.anyTransitiveCallInvalid = false
             }
             if (node is DependencyGraph.ComputationNode<*>) {
                 when (val state: ECacheEntryState = node.state) {

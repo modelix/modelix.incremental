@@ -150,8 +150,8 @@ class DependencyGraph(val engine: IncrementalEngine) {
                 reachable = null
             }
         private var anyTransitiveReadInvalid = false
-        var anyTransitiveWrite = false
-        var anyTransitiveCallInvalid = true
+        private var anyTransitiveWrite = false
+        private var anyTransitiveCallInvalid = false
         private val reverseDependencies: Array<MutableSet<Node>> = EDependencyType.values().map { HashSet<Node>() }.toTypedArray()
         private val dependencies: Array<MutableSet<Node>> = EDependencyType.values().map { HashSet<Node>() }.toTypedArray()
         var preventRemoval = false
@@ -159,6 +159,11 @@ class DependencyGraph(val engine: IncrementalEngine) {
         fun isAnyTransitiveReadInvalid(): Boolean {
             checkNodeDisposed()
             return anyTransitiveReadInvalid
+        }
+
+        fun isAnyTransitiveCallInvalid(): Boolean {
+            checkNodeDisposed()
+            return anyTransitiveCallInvalid
         }
 
         fun resetAnyTransitiveReadInvalid() {
@@ -196,6 +201,22 @@ class DependencyGraph(val engine: IncrementalEngine) {
                     "$key is marked as transitive invalid, but $wrong isn't"
                 }
             }
+
+            val callInvalidReverseDeps = getReverseDependencies(EDependencyType.READ)
+                .filter { it.anyTransitiveCallInvalid }.map { it.key }
+            if (callInvalidReverseDeps.isNotEmpty()) {
+                require(anyTransitiveCallInvalid) {
+                    "$callInvalidReverseDeps is call-invalid, but $key isn't"
+                }
+            }
+
+            if (anyTransitiveCallInvalid || isInvalid()) {
+                val nonCallInvalidDeps = getDependencies(EDependencyType.READ)
+                    .filter { !it.anyTransitiveCallInvalid }.map { it.key }
+                require(nonCallInvalidDeps.isEmpty()) {
+                    "$key is call-invalid, but $nonCallInvalidDeps isn't"
+                }
+            }
         }
 
         open fun isReachable(): Boolean {
@@ -226,6 +247,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             dependency.addReverseDependency(this, type)
             updateAnyTransitiveWrite()
             if (dependency.anyTransitiveReadInvalid) transitiveReadModified()
+            updateAnyTransitiveCallInvalid()
             runAssertions()
         }
 
@@ -244,6 +266,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             dependencies[type.ordinal] -= dependency
             dependency.removeReverseDependency(this, type)
             updateAnyTransitiveWrite()
+            updateAnyTransitiveCallInvalid()
             runAssertions()
         }
 
@@ -266,6 +289,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             reverseDependencies[type.ordinal] += dependency
 
             if (type == EDependencyType.READ) reachable = null
+            updateAnyTransitiveCallInvalid()
         }
 
         private fun removeReverseDependency(dependency: Node, type: EDependencyType) {
@@ -274,6 +298,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             reverseDependencies[type.ordinal] -= dependency
 
             afterReverseDependencyRemoved(dependency, type)
+            updateAnyTransitiveCallInvalid()
         }
 
         protected open fun afterReverseDependencyRemoved(dependency: Node, type: EDependencyType) {
@@ -284,16 +309,17 @@ class DependencyGraph(val engine: IncrementalEngine) {
             return reverseDependencies[type.ordinal]
         }
 
-        fun transitiveReadModified() {
+        private fun transitiveReadModified() {
             checkNodeDisposed()
             anyTransitiveReadInvalid = canBeValidated()
             for (dep in getReverseDependencies(EDependencyType.READ)) {
                 if (!dep.anyTransitiveReadInvalid) dep.transitiveReadModified()
             }
-            runAssertions()
         }
 
         open fun canBeValidated() = false
+
+        open fun isInvalid() = false
 
         open fun modified() {
             checkNodeDisposed()
@@ -301,17 +327,20 @@ class DependencyGraph(val engine: IncrementalEngine) {
                 if (dep is ComputationNode<*>) dep.invalidate()
             }
             transitiveReadModified()
-            transitiveCallModified()
+            updateAnyTransitiveCallInvalid()
             runAssertions()
         }
 
-        fun transitiveCallModified() {
+        protected fun updateAnyTransitiveCallInvalid() {
             checkNodeDisposed()
-            anyTransitiveCallInvalid = true
-            for (dep in getDependencies(EDependencyType.READ)) {
-                if (!dep.anyTransitiveCallInvalid) dep.transitiveCallModified()
+            val oldValue = anyTransitiveCallInvalid
+            val newValue = getReverseDependencies(EDependencyType.READ).any { it.isAnyTransitiveCallInvalid() || it.isInvalid() }
+            anyTransitiveCallInvalid = newValue
+            if (oldValue != newValue) {
+                for (dep in getDependencies(EDependencyType.READ)) {
+                    if (!dep.anyTransitiveCallInvalid) dep.updateAnyTransitiveCallInvalid()
+                }
             }
-            runAssertions()
         }
     }
 
@@ -438,6 +467,10 @@ class DependencyGraph(val engine: IncrementalEngine) {
             return super.isReachable()
         }
 
+        override fun isInvalid(): Boolean {
+            return state == ECacheEntryState.INVALID
+        }
+
         override fun toString(): String = "computation[${key.decl}]"
 
         fun getComputation(): IComputationDeclaration<E> = key.decl as IComputationDeclaration<E>
@@ -459,6 +492,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             setDependencies(this, newWrites, EDependencyType.WRITE)
             state = ECacheEntryState.VALID
             resetAnyTransitiveReadInvalid()
+            updateAnyTransitiveCallInvalid()
         }
 
         fun validationFailed(
@@ -475,6 +509,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             setDependencies(this, newWrites, EDependencyType.WRITE)
             state = ECacheEntryState.FAILED
             resetAnyTransitiveReadInvalid()
+            updateAnyTransitiveCallInvalid()
         }
 
         fun invalidate() {
