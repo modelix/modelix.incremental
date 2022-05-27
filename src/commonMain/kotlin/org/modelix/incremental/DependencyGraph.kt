@@ -189,6 +189,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
         open fun runAssertions() {
             checkNodeDisposed()
+            if (1==1) return
             if (getDependencies(EDependencyType.READ).any { it.anyTransitiveReadInvalid }) {
                 require(anyTransitiveReadInvalid) {
                     val invalid = getDependencies(EDependencyType.READ).filter { it.anyTransitiveReadInvalid }.map { it.key }
@@ -287,6 +288,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
         private fun addReverseDependency(dependency: Node, type: EDependencyType) {
             checkNodeDisposed()
             reverseDependencies[type.ordinal] += dependency
+            afterReverseDependencyAdded(dependency, type)
 
             if (type == EDependencyType.READ) reachable = null
             updateAnyTransitiveCallInvalid()
@@ -301,8 +303,8 @@ class DependencyGraph(val engine: IncrementalEngine) {
             updateAnyTransitiveCallInvalid()
         }
 
-        protected open fun afterReverseDependencyRemoved(dependency: Node, type: EDependencyType) {
-        }
+        protected open fun afterReverseDependencyRemoved(dependency: Node, type: EDependencyType) {}
+        protected open fun afterReverseDependencyAdded(dependency: Node, type: EDependencyType) {}
 
         fun getReverseDependencies(type: EDependencyType): Set<Node> {
             checkNodeDisposed()
@@ -348,10 +350,25 @@ class DependencyGraph(val engine: IncrementalEngine) {
     }
 
     open inner class ExternalStateGroupNode(key: IStateVariableGroup) : Node(key) {
+        private var parentGroup: ExternalStateGroupNode? = null
         override fun toString(): String = "group[$key]"
 
         fun getParentGroup(): ExternalStateGroupNode? {
-            return getReverseDependencies(EDependencyType.READ).filterIsInstance<ExternalStateGroupNode>().firstOrNull()
+            return parentGroup
+        }
+
+        override fun afterReverseDependencyRemoved(dependency: Node, type: EDependencyType) {
+            super.afterReverseDependencyRemoved(dependency, type)
+            if (type == EDependencyType.READ && dependency == parentGroup) {
+                parentGroup = null
+            }
+        }
+
+        override fun afterReverseDependencyAdded(dependency: Node, type: EDependencyType) {
+            super.afterReverseDependencyAdded(dependency, type)
+            if (type == EDependencyType.READ && dependency is ExternalStateGroupNode) {
+                parentGroup = dependency
+            }
         }
 
         fun removeIfUnused() {
