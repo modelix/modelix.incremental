@@ -68,9 +68,9 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
     fun getNode(key: IStateVariableGroup): Node? = nodes[key]
 
-    fun <T> getOrAddNode(key: IStateVariableReference<T>): Node = getOrAddNodeAndGroups(key)
+    fun <T> getOrAddNode(key: IStateVariableReference<T>, updateLRU: Boolean = false): Node = getOrAddNodeAndGroups(key, updateLRU)
 
-    private fun getOrAddNodeAndGroups(key: IStateVariableGroup): Node {
+    private fun getOrAddNodeAndGroups(key: IStateVariableGroup, updateLRU: Boolean = false): Node {
         var node = nodes[key]
         if (node == null) {
             var parentGroup: IStateVariableGroup? = null
@@ -90,9 +90,11 @@ class DependencyGraph(val engine: IncrementalEngine) {
                 parentNode.addDependency(node, EDependencyType.READ)
             }
         }
-        if (node is InternalStateNode<*, *>) {
-            if (lru[key] == null) { // the get access here is important to move the entry to the MRU end of the queue
-                lru[key] = node
+        if (updateLRU) {
+            if (node is InternalStateNode<*, *>) {
+                if (lru[key] == null) { // the get access here is important to move the entry to the MRU end of the queue
+                    lru[key] = node
+                }
             }
         }
         return node
@@ -118,6 +120,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
         val addedDeps: Set<IStateVariableGroup> = to - current
         val removedDeps: Set<IStateVariableGroup> = current - to
         for (dep in removedDeps) {
+            // TODO this causes a second access in the SLRU removing the advantage of the two segments
             fromNode.removeDependency(getOrAddNodeAndGroups(dep), type)
         }
         for (dep in addedDeps) {
@@ -151,7 +154,13 @@ class DependencyGraph(val engine: IncrementalEngine) {
             }
         private var anyTransitiveReadInvalid = false
         private var anyTransitiveWrite = false
-        private var anyTransitiveCallInvalid = false
+        private var transitiveCallInvalidCounter: Int = 0
+            set(value) {
+                require(value >= 0) {
+                    "no negative counter values allowed"
+                }
+                field = value
+            }
         private val reverseDependencies: Array<MutableSet<Node>> = EDependencyType.values().map { HashSet<Node>() }.toTypedArray()
         private val dependencies: Array<MutableSet<Node>> = EDependencyType.values().map { HashSet<Node>() }.toTypedArray()
         var preventRemoval = false
@@ -163,7 +172,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
         fun isAnyTransitiveCallInvalid(): Boolean {
             checkNodeDisposed()
-            return anyTransitiveCallInvalid
+            return transitiveCallInvalidCounter != 0
         }
 
         fun resetAnyTransitiveReadInvalid() {
@@ -189,7 +198,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
 
         open fun runAssertions() {
             checkNodeDisposed()
-            if (1==1) return
+            //if (1==1) return
             if (getDependencies(EDependencyType.READ).any { it.anyTransitiveReadInvalid }) {
                 require(anyTransitiveReadInvalid) {
                     val invalid = getDependencies(EDependencyType.READ).filter { it.anyTransitiveReadInvalid }.map { it.key }
@@ -204,16 +213,16 @@ class DependencyGraph(val engine: IncrementalEngine) {
             }
 
             val callInvalidReverseDeps = getReverseDependencies(EDependencyType.READ)
-                .filter { it.anyTransitiveCallInvalid }.map { it.key }
+                .filter { it.isAnyTransitiveCallInvalid() }.map { it.key }
             if (callInvalidReverseDeps.isNotEmpty()) {
-                require(anyTransitiveCallInvalid) {
+                require(isAnyTransitiveCallInvalid()) {
                     "$callInvalidReverseDeps is call-invalid, but $key isn't"
                 }
             }
 
-            if (anyTransitiveCallInvalid || isInvalid()) {
+            if (isAnyTransitiveCallInvalid() || isInvalid()) {
                 val nonCallInvalidDeps = getDependencies(EDependencyType.READ)
-                    .filter { !it.anyTransitiveCallInvalid }.map { it.key }
+                    .filter { !it.isAnyTransitiveCallInvalid() }.map { it.key }
                 require(nonCallInvalidDeps.isEmpty()) {
                     "$key is call-invalid, but $nonCallInvalidDeps isn't"
                 }
@@ -248,11 +257,11 @@ class DependencyGraph(val engine: IncrementalEngine) {
             dependency.addReverseDependency(this, type)
             updateAnyTransitiveWrite()
             if (dependency.anyTransitiveReadInvalid) transitiveReadModified()
-            updateAnyTransitiveCallInvalid()
             runAssertions()
         }
 
         fun updateAnyTransitiveWrite() {
+            if (1==1) return
             checkNodeDisposed()
             val oldValue = anyTransitiveWrite
             anyTransitiveWrite = getDependencies(EDependencyType.WRITE).isNotEmpty() ||
@@ -267,7 +276,6 @@ class DependencyGraph(val engine: IncrementalEngine) {
             dependencies[type.ordinal] -= dependency
             dependency.removeReverseDependency(this, type)
             updateAnyTransitiveWrite()
-            updateAnyTransitiveCallInvalid()
             runAssertions()
         }
 
@@ -291,7 +299,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             afterReverseDependencyAdded(dependency, type)
 
             if (type == EDependencyType.READ) reachable = null
-            updateAnyTransitiveCallInvalid()
+            if (type == EDependencyType.READ) updateAnyTransitiveCallInvalid(dependency, null, 0)
         }
 
         private fun removeReverseDependency(dependency: Node, type: EDependencyType) {
@@ -300,7 +308,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             reverseDependencies[type.ordinal] -= dependency
 
             afterReverseDependencyRemoved(dependency, type)
-            updateAnyTransitiveCallInvalid()
+            if (type == EDependencyType.READ) updateAnyTransitiveCallInvalid(null, dependency, 0)
         }
 
         protected open fun afterReverseDependencyRemoved(dependency: Node, type: EDependencyType) {}
@@ -329,18 +337,28 @@ class DependencyGraph(val engine: IncrementalEngine) {
                 if (dep is ComputationNode<*>) dep.invalidate()
             }
             transitiveReadModified()
-            updateAnyTransitiveCallInvalid()
             runAssertions()
         }
 
-        protected fun updateAnyTransitiveCallInvalid() {
+        fun updateAnyTransitiveCallInvalid(
+            addedReverseDependency: Node?,
+            removedReverseDependency: Node?,
+            changeFromReverseDep: Int,
+        ) {
             checkNodeDisposed()
-            val oldValue = anyTransitiveCallInvalid
-            val newValue = getReverseDependencies(EDependencyType.READ).any { it.isAnyTransitiveCallInvalid() || it.isInvalid() }
-            anyTransitiveCallInvalid = newValue
+            val oldValue = isAnyTransitiveCallInvalid()
+            if (addedReverseDependency != null && (addedReverseDependency.isAnyTransitiveCallInvalid() || addedReverseDependency.isInvalid())) {
+                transitiveCallInvalidCounter++
+            }
+            if (removedReverseDependency != null && (removedReverseDependency.isAnyTransitiveCallInvalid() || removedReverseDependency.isInvalid())) {
+                transitiveCallInvalidCounter--
+            }
+            transitiveCallInvalidCounter += changeFromReverseDep
+            val newValue = isAnyTransitiveCallInvalid()
             if (oldValue != newValue) {
+                val delta = if (newValue) 1 else -1
                 for (dep in getDependencies(EDependencyType.READ)) {
-                    if (!dep.anyTransitiveCallInvalid) dep.updateAnyTransitiveCallInvalid()
+                    dep.updateAnyTransitiveCallInvalid(null, null, delta)
                 }
                 for (dep in getDependencies(EDependencyType.WRITE)) {
                     dep.transitiveReadModified()
@@ -488,8 +506,10 @@ class DependencyGraph(val engine: IncrementalEngine) {
         }
 
         override fun isInvalid(): Boolean {
-            return state == ECacheEntryState.INVALID
+            return !isValid()
         }
+
+        fun isValid() = state == ECacheEntryState.VALID || state == ECacheEntryState.FAILED
 
         override fun toString(): String = "computation[${key.decl}]"
 
@@ -508,11 +528,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             require(state == ECacheEntryState.VALIDATING) { "There is no active validation for $key" }
             writeValue(newValue, this)
             lastException = null
-            setDependencies(this, newDependencies, EDependencyType.READ)
-            setDependencies(this, newWrites, EDependencyType.WRITE)
-            state = ECacheEntryState.VALID
-            resetAnyTransitiveReadInvalid()
-            updateAnyTransitiveCallInvalid()
+            validationDone(ECacheEntryState.VALID, newDependencies, newWrites)
         }
 
         fun validationFailed(
@@ -525,11 +541,21 @@ class DependencyGraph(val engine: IncrementalEngine) {
             }
             updateValue(Optional.empty(), this)
             lastException = exception
+            validationDone(ECacheEntryState.FAILED, newDependencies, newWrites)
+        }
+
+        private fun validationDone(
+            newState: ECacheEntryState,
+            newDependencies: Set<IStateVariableReference<*>>,
+            newWrites: Set<IStateVariableReference<*>>,
+        ) {
             setDependencies(this, newDependencies, EDependencyType.READ)
             setDependencies(this, newWrites, EDependencyType.WRITE)
-            state = ECacheEntryState.FAILED
+            state = newState
             resetAnyTransitiveReadInvalid()
-            updateAnyTransitiveCallInvalid()
+            for (dep in getDependencies(EDependencyType.READ)) {
+                dep.updateAnyTransitiveCallInvalid(null, null, -1)
+            }
         }
 
         fun invalidate() {
@@ -539,7 +565,9 @@ class DependencyGraph(val engine: IncrementalEngine) {
                 dep.transitiveReadModified()
             }
             transitiveReadModified()
-            updateAnyTransitiveCallInvalid()
+            for (dep in getDependencies(EDependencyType.READ)) {
+                dep.updateAnyTransitiveCallInvalid(null, null, 1)
+            }
         }
     }
 }
