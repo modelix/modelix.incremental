@@ -1,0 +1,45 @@
+digraph dependencyGraph {
+
+    scopes
+    processNode_ClassA
+    processNode_methodA
+    processNode_fieldA
+    processNode_paramA
+    processNode_body
+    processNode_lvd1
+
+    classA_private [label="classA\nprivate", color="0.3 0.4 0.5", shape=octagon, style=filled]
+    processNode_fieldA -> classA_private
+    fieldA -> processNode_fieldA
+
+    typesystem -> processNode_ClassA
+    processNode_ClassA -> processNode_methodA
+    processNode_methodA -> processNode_paramA
+    processNode_methodA -> processNode_body
+    processNode_body -> processNode_lvd1
+
+    processNode_lvd1 -> type_lvd1
+
+
+    editor_lvd1 -> type_lvd1
+
+    ClassA [color=lightblue2, shape=box, style=filled]
+    methodA [color=lightblue2, shape=box, style=filled]
+    fieldA [color=lightblue2, shape=box, style=filled]
+    paramA [color=lightblue2, shape=box, style=filled]
+    body [color=lightblue2, shape=box, style=filled]
+    lvd1 [color=lightblue2, shape=box, style=filled]
+    processNode_ClassA -> ClassA
+    processNode_methodA -> methodA
+    processNode_paramA -> paramA
+    processNode_body -> body
+    processNode_lvd1 -> lvd1
+    type_lvd1 -> lvd1
+    editor_lvd1 -> lvd1
+
+    root -> editor_lvd1
+    root -> typesystem
+
+
+}
+

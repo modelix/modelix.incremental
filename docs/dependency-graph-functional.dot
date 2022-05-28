@@ -1,0 +1,48 @@
+digraph dependencyGraph {
+
+    i0 [color=lightblue2, shape=box, style=filled]
+    i1 [color=lightblue2, shape=box, style=filled]
+    i2 [color=lightblue2, shape=box, style=filled]
+    i3 [color=lightblue2, shape=box, style=filled]
+    i4 [color=lightblue2, shape=box, style=filled]
+    i5 [color=lightblue2, shape=box, style=filled]
+    i6 [color=lightblue2, shape=box, style=filled]
+    i7 [color=lightblue2, shape=box, style=filled]
+
+    cache_sum_0_1  [color=wheat3, shape=box, style=filled]
+    cache_sum_2_3  [color=wheat3, shape=box, style=filled]
+    cache_sum_4_5  [color=wheat3, shape=box, style=filled]
+    cache_sum_6_7  [color=wheat3, shape=box, style=filled]
+    cache_sum_0_3  [color=wheat3, shape=box, style=filled]
+    cache_sum_4_7  [color=wheat3, shape=box, style=filled]
+    cache_sum_0_7  [color=wheat3, shape=box, style=filled]
+
+    cache_sum_0_1 -> sum_0_1
+    cache_sum_2_3 -> sum_2_3
+    cache_sum_4_5 -> sum_4_5
+    cache_sum_6_7 -> sum_6_7
+
+    sum_0_1 -> i0
+    sum_0_1 -> i1
+    sum_2_3 -> i2
+    sum_2_3 -> i3
+    sum_4_5 -> i4
+    sum_4_5 -> i5
+    sum_6_7 -> i6
+    sum_6_7 -> i7
+
+    sum_0_3 -> cache_sum_0_1
+    sum_0_3 -> cache_sum_2_3
+    sum_4_7 -> cache_sum_4_5
+    sum_4_7 -> cache_sum_6_7
+
+    cache_sum_0_3 -> sum_0_3
+    cache_sum_4_7 -> sum_4_7
+
+    sum_0_7 -> cache_sum_0_3
+    sum_0_7 -> cache_sum_4_7
+
+    cache_sum_0_7 -> sum_0_7
+
+}
+
