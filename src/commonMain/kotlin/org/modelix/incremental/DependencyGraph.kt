@@ -553,9 +553,12 @@ class DependencyGraph(val engine: IncrementalEngine) {
             setDependencies(this, newWrites, EDependencyType.WRITE)
             state = newState
             resetAnyTransitiveReadInvalid()
-            for (dep in getDependencies(EDependencyType.READ)) {
-                dep.updateAnyTransitiveCallInvalid(null, null, -1)
+            if (isAnyTransitiveCallInvalid()) {
+                for (dep in getDependencies(EDependencyType.READ)) {
+                    dep.updateAnyTransitiveCallInvalid(null, null, -1)
+                }
             }
+            runAssertions()
         }
 
         fun invalidate() {
