@@ -48,7 +48,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
                 updateCallers(caller)
             }
         }
-        if (node.isInvalid()) {
+        if (node.isInvalid) {
             update(node.key as InternalStateVariableReference<*, *>)
         }
     }
@@ -85,7 +85,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
             }
             if (node is DependencyGraph.ComputationNode<*>) {
                 when (val state: ECacheEntryState = node.state) {
-                    ECacheEntryState.VALID -> {
+                    ECacheEntryState.SUCCESSFUL -> {
                         return node.getValue().getValue()
                     }
                     ECacheEntryState.FAILED -> {
@@ -189,7 +189,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
     @Synchronized
     override fun flush() {
         checkDisposed()
-        for (autoValidation in graph.autoValidations.filter { it !is DependencyGraph.ComputationNode<*> || it.state != ECacheEntryState.VALID }) {
+        for (autoValidation in graph.autoValidations.filter { it !is DependencyGraph.ComputationNode<*> || !it.state.isValid() }) {
             update(autoValidation.key)
         }
     }
