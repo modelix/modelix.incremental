@@ -1,9 +1,9 @@
 plugins {
-    kotlin("multiplatform") version "1.6.20"
-    id("org.jetbrains.kotlinx.benchmark") version "0.4.2"
-    id("org.jetbrains.kotlin.plugin.allopen") version "1.6.21"
+    kotlin("multiplatform") version "1.7.20"
+    id("org.jetbrains.kotlinx.benchmark") version "0.4.5"
+    id("org.jetbrains.kotlin.plugin.allopen") version "1.7.20"
     `maven-publish`
-    id("com.palantir.git-version") version "0.13.0"
+    id("com.palantir.git-version") version "0.15.0"
 }
 
 repositories {
@@ -16,8 +16,8 @@ kotlin {
     *  https://kotlinlang.org/docs/reference/building-mpp-with-gradle.html#setting-up-targets */
 
     jvm()
-    js() {
-        //browser {}
+    js(IR) {
+        browser {}
         nodejs {
             testTask {
                 useMocha {
@@ -31,22 +31,21 @@ kotlin {
         val commonMain by getting {
             dependencies {
                 implementation(kotlin("stdlib-common"))
-                implementation("io.github.microutils:kotlin-logging:2.1.21")
-                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.1")
-                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.6.1")
-                implementation("org.jetbrains.kotlinx:kotlinx-benchmark-runtime:0.4.2")
+                implementation("io.github.microutils:kotlin-logging:3.0.2")
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
+                implementation("org.jetbrains.kotlinx:kotlinx-benchmark-runtime:0.4.5")
             }
         }
         val commonTest by getting {
             dependencies {
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.6.4")
                 implementation(kotlin("test-common"))
                 implementation(kotlin("test-annotations-common"))
             }
         }
         val jvmMain by getting {
             dependencies {
-                implementation("io.reactivex.rxjava3:rxkotlin:3.0.1")
-                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.6.1")
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.6.4")
             }
         }
         val jvmTest by getting {
