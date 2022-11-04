@@ -325,7 +325,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
             require(state == ECacheEntryState.VALIDATING) { "There is no active validation for $key" }
             writeValue(newValue, this)
             lastException = null
-            newDependencies.map { getOrAddNode(it) }
+            newDependencies.toList().map { getOrAddNode(it) }
                 .filterIsInstance<ExternalStateGroupNode>()
                 .forEach { it.accessed() }
             setDependencies(this, newDependencies)
