@@ -49,12 +49,12 @@ class IncrementalIndexTest {
             index.update(incrementalList)
             index
         }
-        assertEquals(500, createIndex().lookup(5500))
+        assertEquals(500, createIndex().lookup(5500).firstOrNull())
         assertEquals(2001, invocationCount)
         assertEquals(1001, createIndex().getNumberOfInsertions())
         input.set(500, 15500)
         input.set(700, 5500)
-        assertEquals(700, createIndex().lookup(5500))
+        assertEquals(700, createIndex().lookup(5500).firstOrNull())
         assertEquals(2021, invocationCount)
         assertEquals(1003, createIndex().getNumberOfInsertions())
     }

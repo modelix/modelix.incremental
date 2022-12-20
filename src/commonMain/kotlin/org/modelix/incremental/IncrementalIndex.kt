@@ -1,11 +1,9 @@
 package org.modelix.incremental
 
-import kotlin.jvm.Synchronized
-
 class IncrementalIndex<K, V> {
 
     private var unsorted = IncrementalList.empty<Pair<K, V>>()
-    private val map: MutableMap<K, V> = HashMap()
+    private val map: MutableMap<K, List<V>> = HashMap()
     private var removalCounter: Long = 0
     private var insertionCounter: Long = 0
 
@@ -20,12 +18,26 @@ class IncrementalIndex<K, V> {
                 allInsertions += newElements
             }
         })
-        allRemovals.forEach { it.forEach { map -= it.first } }
-        allInsertions.forEach { it.forEach { map += it } }
+        allRemovals.forEach { it.forEach { removeEntry(it) } }
+        allInsertions.forEach { it.forEach { addEntry(it) } }
         unsorted = newEntries
     }
 
-    fun lookup(key: K): V? = map[key]
+    private fun removeEntry(entry: Pair<K, V>) {
+        val list = map[entry.first] ?: return
+        val newList = list - entry.second
+        if (newList.isEmpty()) {
+            map.remove(entry.first)
+        } else {
+            map[entry.first] = newList
+        }
+    }
+
+    private fun addEntry(entry: Pair<K, V>) {
+        map[entry.first] = (map[entry.first] ?: emptyList()) + entry.second
+    }
+
+    fun lookup(key: K): List<V> = map[key] ?: emptyList()
 
     fun getNumberOfRemovals(): Long = removalCounter
     fun getNumberOfInsertions(): Long = insertionCounter
