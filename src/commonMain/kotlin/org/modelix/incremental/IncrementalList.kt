@@ -79,7 +79,7 @@ private class IncrementalListSubtree<E>(val children: Array<out IncrementalList<
                 if (oldIndex != null) continue
                 val anchorIndex = children.take(newChild.index).indexOfLast { oldIndexes.contains(it) }
                 val insertPosition = if (anchorIndex != -1) anchorIndex + 1 else newChild.index
-                allChildren.add(insertPosition, newChild.value)
+                allChildren.add(insertPosition.coerceAtMost(allChildren.size), newChild.value)
             }
 
             val ops = allChildren.map {
