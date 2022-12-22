@@ -21,6 +21,7 @@ class IncrementalIndex<K, V> {
         allRemovals.forEach { it.forEach { removeEntry(it) } }
         allInsertions.forEach { it.forEach { addEntry(it) } }
         unsorted = newEntries
+        // TODO support change tracking of entries
     }
 
     private fun removeEntry(entry: Pair<K, V>) {
