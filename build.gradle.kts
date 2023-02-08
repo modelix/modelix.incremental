@@ -11,7 +11,7 @@ repositories {
 }
 
 kotlin {
-    /* Targets configuration omitted. 
+    /* Targets configuration omitted.
     *  To find out how to configure the targets, please follow the link:
     *  https://kotlinlang.org/docs/reference/building-mpp-with-gradle.html#setting-up-targets */
 
@@ -124,6 +124,16 @@ publishing {
                 credentials {
                     username = project.findProperty("artifacts.itemis.cloud.user").toString()
                     password = project.findProperty("artifacts.itemis.cloud.pw").toString()
+                }
+            }
+        }
+        if ("true" == project.findProperty("publishGHP")) {
+            maven {
+                name = "GitHubPackages"
+                url = uri("https://maven.pkg.github.com/modelix/incremental")
+                credentials {
+                    username = project.findProperty("gpr.user") as? String ?: System.getenv("GITHUB_ACTOR")
+                    password = project.findProperty("gpr.key") as? String ?: System.getenv("GITHUB_TOKEN")
                 }
             }
         }
