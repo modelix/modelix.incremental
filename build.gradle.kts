@@ -128,8 +128,8 @@ publishing {
             }
         }
 
-        ghp_username = project.findProperty("gpr.user") as? String ?: System.getenv("GITHUB_ACTOR")
-        ghp_password = project.findProperty("gpr.key") as? String ?: System.getenv("GITHUB_TOKEN")
+        val ghp_username = project.findProperty("gpr.user") as? String ?: System.getenv("GITHUB_ACTOR")
+        val ghp_password = project.findProperty("gpr.key") as? String ?: System.getenv("GITHUB_TOKEN")
 
         if (ghp_username != null && ghp_password != null) {
             maven {
