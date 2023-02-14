@@ -127,13 +127,17 @@ publishing {
                 }
             }
         }
-        if ("true" == project.findProperty("publishGHP")) {
+
+        ghp_username = project.findProperty("gpr.user") as? String ?: System.getenv("GITHUB_ACTOR")
+        ghp_password = project.findProperty("gpr.key") as? String ?: System.getenv("GITHUB_TOKEN")
+
+        if (ghp_username != null && ghp_password != null) {
             maven {
                 name = "GitHubPackages"
                 url = uri("https://maven.pkg.github.com/modelix/incremental")
                 credentials {
-                    username = project.findProperty("gpr.user") as? String ?: System.getenv("GITHUB_ACTOR")
-                    password = project.findProperty("gpr.key") as? String ?: System.getenv("GITHUB_TOKEN")
+                    username = ghp_username
+                    password = ghp_password
                 }
             }
         }
