@@ -10,6 +10,8 @@ abstract class IncrementalList<E> {
 
     abstract fun collectElements(acc: MutableCollection<E>)
 
+    abstract fun asSequence(): Sequence<E>
+
     fun toList(): List<E> {
         val acc = ArrayList<E>(getSize())
         collectElements(acc)
@@ -40,6 +42,7 @@ interface IIncrementalListDiffVisitor<E> {
 private class IncrementalListEmpty<E>() : IncrementalList<E>() {
     override fun getSize(): Int = 0
     override fun collectElements(acc: MutableCollection<E>) {}
+    override fun asSequence(): Sequence<E> = emptySequence()
     override fun diff(globalIndex: Int, oldList: IncrementalList<E>, visitor: IIncrementalListDiffVisitor<E>) {
         if (oldList.getSize() > 0) {
             visitor.rangeReplaced(globalIndex, oldList.toList(), toList())
@@ -52,6 +55,8 @@ private class IncrementalListLeaf<E>(val element: E) : IncrementalList<E>() {
     override fun collectElements(acc: MutableCollection<E>) {
         acc.add(element)
     }
+
+    override fun asSequence(): Sequence<E> = sequenceOf(element)
 
     override fun diff(globalIndex: Int, oldList: IncrementalList<E>, visitor: IIncrementalListDiffVisitor<E>) {
         if (oldList === this) return
@@ -67,6 +72,8 @@ private class IncrementalListSubtree<E>(val children: Array<out IncrementalList<
             child.collectElements(acc)
         }
     }
+
+    override fun asSequence(): Sequence<E> = children.asSequence().flatMap { it.asSequence() }
 
     override fun diff(globalIndex: Int, oldList: IncrementalList<E>, visitor: IIncrementalListDiffVisitor<E>) {
         if (oldList === this) return
