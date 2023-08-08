@@ -33,7 +33,7 @@ kotlin {
                 implementation(kotlin("stdlib-common"))
                 implementation("io.github.microutils:kotlin-logging:3.0.2")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
-                implementation("org.jetbrains.kotlinx:kotlinx-benchmark-runtime:0.4.5")
+                implementation("org.jetbrains.kotlinx:kotlinx-benchmark-runtime:0.4.9")
             }
         }
         val commonTest by getting {
