@@ -31,7 +31,7 @@ kotlin {
         val commonMain by getting {
             dependencies {
                 implementation(kotlin("stdlib-common"))
-                implementation("io.github.microutils:kotlin-logging:3.0.2")
+                implementation("io.github.microutils:kotlin-logging:3.0.5")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
                 implementation("org.jetbrains.kotlinx:kotlinx-benchmark-runtime:0.4.5")
             }
