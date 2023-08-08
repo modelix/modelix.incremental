@@ -1,6 +1,6 @@
 plugins {
     kotlin("multiplatform") version "1.7.20"
-    id("org.jetbrains.kotlinx.benchmark") version "0.4.5"
+    id("org.jetbrains.kotlinx.benchmark") version "0.4.9"
     id("org.jetbrains.kotlin.plugin.allopen") version "1.7.20"
     `maven-publish`
     id("com.palantir.git-version") version "0.15.0"
