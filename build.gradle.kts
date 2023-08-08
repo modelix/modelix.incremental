@@ -1,9 +1,9 @@
 plugins {
-    kotlin("multiplatform") version "1.7.20"
-    id("org.jetbrains.kotlinx.benchmark") version "0.4.5"
-    id("org.jetbrains.kotlin.plugin.allopen") version "1.7.20"
+    kotlin("multiplatform") version "1.9.0"
+    id("org.jetbrains.kotlinx.benchmark") version "0.4.9"
+    id("org.jetbrains.kotlin.plugin.allopen") version "1.9.0"
     `maven-publish`
-    id("com.palantir.git-version") version "0.15.0"
+    id("com.palantir.git-version") version "3.0.0"
 }
 
 repositories {
@@ -31,21 +31,21 @@ kotlin {
         val commonMain by getting {
             dependencies {
                 implementation(kotlin("stdlib-common"))
-                implementation("io.github.microutils:kotlin-logging:3.0.2")
-                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
-                implementation("org.jetbrains.kotlinx:kotlinx-benchmark-runtime:0.4.5")
+                implementation("io.github.microutils:kotlin-logging:3.0.5")
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+                implementation("org.jetbrains.kotlinx:kotlinx-benchmark-runtime:0.4.9")
             }
         }
         val commonTest by getting {
             dependencies {
-                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.6.4")
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
                 implementation(kotlin("test-common"))
                 implementation(kotlin("test-annotations-common"))
             }
         }
         val jvmMain by getting {
             dependencies {
-                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.6.4")
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.7.3")
             }
         }
         val jvmTest by getting {
