@@ -1,2 +1,2 @@
-rootProject.name = "incremental"
+rootProject.name = "modelix.incremental"
 
