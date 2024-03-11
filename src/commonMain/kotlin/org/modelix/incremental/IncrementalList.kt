@@ -1,5 +1,11 @@
 package org.modelix.incremental
 
+/**
+ * A general requirement for values computed and cached by the incremental engine is that they are immutable.
+ * This IncrementalList data structure is immutable and designed to be used as a return value of IncrementalFunctions.
+ *
+ * It's especially useful when recursively collecting items from a tree like input data structure.
+ */
 abstract class IncrementalList<E> {
 
     fun diff(oldList: IncrementalList<E>, visitor: IIncrementalListDiffVisitor<E>) = diff(0, oldList, visitor)
