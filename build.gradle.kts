@@ -83,6 +83,7 @@ benchmark {
             warmups = 4
             iterations = 10
             iterationTime = 1
+            iterationTimeUnit = "s"
             outputTimeUnit = "s"
             //mode = "avgt"
             reportFormat = "text"
@@ -92,6 +93,7 @@ benchmark {
             warmups = 4
             iterations = 10
             iterationTime = 1
+            iterationTimeUnit = "s"
             outputTimeUnit = "s"
             reportFormat = "text"
             include("RecursiveSum")
