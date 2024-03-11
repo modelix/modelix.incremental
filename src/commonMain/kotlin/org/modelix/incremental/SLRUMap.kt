@@ -37,17 +37,17 @@ abstract class SLRUMap<K, V>(val protectedSize: Int, val probationarySize: Int) 
 
     private fun ensureProbationarySize() {
         if (probationary.size > probationarySize) {
-            val entry = probationary.entries.first()
-            probationary.remove(entry.key)
-            evicted(entry.key, entry.value)
+            val (key, value) = probationary.entries.first()
+            probationary.remove(key)
+            evicted(key, value)
         }
     }
 
     private fun ensureProtectedSize() {
         if (protected.size > protectedSize) {
-            val entry = protected.entries.first()
-            protected.remove(entry.key)
-            probationary[entry.key] = entry.value
+            val (key, value) = protected.entries.first()
+            protected.remove(key)
+            probationary[key] = value
             ensureProbationarySize()
         }
     }
