@@ -3,7 +3,7 @@
 [versions]
 
 kotlin = "1.9.23"
-kotlinCoroutines="1.8.0"
+kotlinCoroutines="1.8.1"
 kotlinBenchmark = "0.4.10"
 
 [plugins]
