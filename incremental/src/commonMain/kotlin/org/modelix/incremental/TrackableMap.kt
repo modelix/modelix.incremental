@@ -35,6 +35,11 @@ class TrackableMap<K, V>() : IStateVariableGroup {
         }
     }
 
+    @Synchronized
+    fun removeWhere(predicate: (Map.Entry<K, V>) -> Boolean) {
+        map.asSequence().filter(predicate).map { it.key }.toList().forEach { remove(it) }
+    }
+
     override fun getGroup(): IStateVariableGroup? {
         return null
     }
