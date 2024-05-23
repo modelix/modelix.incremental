@@ -1,6 +1,10 @@
 package org.modelix.incremental.benchmark
 
-import kotlinx.benchmark.*
+import kotlinx.benchmark.Benchmark
+import kotlinx.benchmark.Scope
+import kotlinx.benchmark.Setup
+import kotlinx.benchmark.State
+import kotlinx.benchmark.TearDown
 import kotlinx.coroutines.test.runTest
 import org.modelix.incremental.IncrementalEngine
 import org.modelix.incremental.IncrementalFunctionCall2
@@ -49,8 +53,9 @@ abstract class RecursiveSumLarge(val graphSize: Int, val modificationsRange: Int
 }
 
 @State(Scope.Benchmark)
+@Suppress("ktlint:standard:class-naming")
 class RecursiveLargeSum10_000_000() : RecursiveSumLarge(10_000_000, 1_000_000)
+
 @State(Scope.Benchmark)
+@Suppress("ktlint:standard:class-naming")
 class RecursiveLargeSum1_000() : RecursiveSumLarge(1_000, 100)
-
-

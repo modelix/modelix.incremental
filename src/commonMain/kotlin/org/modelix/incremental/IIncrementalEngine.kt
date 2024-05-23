@@ -11,7 +11,6 @@ interface IIncrementalEngine {
      */
     fun <T> readStateVariables(calls: List<IStateVariableDeclaration<*, T>>): List<T>
 
-
     /**
      * Automatically re-executes the function whenever the inputs change.
      * The function usually produces some side effect and is not expected to have any return value.
@@ -22,5 +21,5 @@ interface IIncrementalEngine {
      * Blocks until all pending functions are recomputed.
      */
     fun flush()
-    fun flush(callback: ()->Unit)
+    fun flush(callback: () -> Unit)
 }

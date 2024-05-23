@@ -1,8 +1,6 @@
 package org.modelix.incremental
 
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.channels.Channel
-import kotlin.math.max
 
 /**
  * Not thread-safe.
@@ -28,14 +26,14 @@ class DependencyGraph(val engine: IncrementalEngine) {
         if (n1.isAutoValidate()) return
         // replace n2->n1->n0 with n2->n0
         val dependencies = n1.getDependencies().toList()
-        //if (dependencies.any { it.state == ECacheEntryState.VALIDATING }) return
+        // if (dependencies.any { it.state == ECacheEntryState.VALIDATING }) return
         if (n1.getReverseDependencies().any { it.state == ECacheEntryState.VALIDATING }) return
         dependencies.forEach { n0 -> n1.removeDependency(n0) }
         val reverseDependencies = n1.getReverseDependencies().toList()
         for (n2 in reverseDependencies) {
             n2.removeDependency(n1)
             dependencies.forEach { n0 -> n2.addDependency(n0) }
-            //println("Merged $n1 into $n2")
+            // println("Merged $n1 into $n2")
         }
         reverseDependencies.filterIsInstance<InternalStateNode<*, *>>().forEach { it.shrinkDependencies() }
         require(n1.getDependencies().isEmpty()) { "$n1 still has dependencies" }
@@ -51,12 +49,13 @@ class DependencyGraph(val engine: IncrementalEngine) {
         var node = nodes[key]
         if (node == null) {
             var parentGroup: IStateVariableGroup? = null
-            node = if (key is InternalStateVariableReference<*, *> && key.engine == engine)
-                if (key.decl is IComputationDeclaration<*>)
+            node = if (key is InternalStateVariableReference<*, *> && key.engine == engine) {
+                if (key.decl is IComputationDeclaration<*>) {
                     ComputationNode(key as InternalStateVariableReference<Any?, Any?>)
-                else
+                } else {
                     InternalStateNode(key)
-            else {
+                }
+            } else {
                 val external = if (key is IStateVariableReference<*>) ExternalStateNode(key) else ExternalStateGroupNode(key)
                 parentGroup = key.getGroup()
                 external
@@ -126,11 +125,11 @@ class DependencyGraph(val engine: IncrementalEngine) {
                 if (newState == ECacheEntryState.VALID) {
                     lastValidation = clock.getTime()
                     if (this is InternalStateNode<*, *>) {
-                        //lru[key] // get access to move then entry to the MRU end of the queue
+                        // lru[key] // get access to move then entry to the MRU end of the queue
                     }
                 }
                 if (previousState == ECacheEntryState.VALID) {
-                    //println("Invalidated: $key")
+                    // println("Invalidated: $key")
                 }
             }
         private var lastValidation: Long = 0L
@@ -232,6 +231,7 @@ class DependencyGraph(val engine: IncrementalEngine) {
     open inner class InternalStateNode<In, Out>(override val key: InternalStateVariableReference<In, Out>) : Node(key) {
         private val inputValues: MutableMap<ComputationNode<*>, In> = HashMap()
         private var outputValue: Optional<Out> = Optional.empty()
+
         /**
          * if true, the engine will validate it directly after it got invalidated, without any external trigger
          */
@@ -339,7 +339,5 @@ class DependencyGraph(val engine: IncrementalEngine) {
             setDependencies(this, newDependencies)
             state = ECacheEntryState.FAILED
         }
-
     }
 }
-

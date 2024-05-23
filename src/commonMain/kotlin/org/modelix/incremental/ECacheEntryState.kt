@@ -6,5 +6,5 @@ enum class ECacheEntryState {
     FAILED,
     VALIDATING,
     INVALID,
-    DEPENDENCY_INVALID
+    DEPENDENCY_INVALID,
 }

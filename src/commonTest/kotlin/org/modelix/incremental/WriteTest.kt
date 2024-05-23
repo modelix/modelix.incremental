@@ -2,8 +2,10 @@ package org.modelix.incremental
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
-import kotlin.test.*
 import kotlinx.coroutines.test.runTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
 
 class WriteTest {
     lateinit var engine: IncrementalEngine
@@ -114,5 +116,4 @@ class WriteTest {
         input1.setValue(0)
         assertEquals(200L, avg())
     }
-
 }

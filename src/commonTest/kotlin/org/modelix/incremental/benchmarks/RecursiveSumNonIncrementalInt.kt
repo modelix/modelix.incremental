@@ -1,13 +1,9 @@
 package org.modelix.incremental.benchmarks
 
-import kotlin.test.assertEquals
-import kotlin.time.measureTime
-import kotlinx.benchmark.*
-import kotlinx.coroutines.test.runTest
-import org.modelix.incremental.IncrementalEngine
-import org.modelix.incremental.IncrementalFunctionCall2
+import kotlinx.benchmark.Benchmark
+import kotlinx.benchmark.Scope
+import kotlinx.benchmark.State
 import org.modelix.incremental.TrackableList
-import org.modelix.incremental.incrementalFunction
 
 @State(Scope.Benchmark)
 class RecursiveSumNonIncrementalInt {
@@ -36,6 +32,3 @@ class RecursiveSumNonIncrementalInt {
         input.asSequence().fold(0) { acc, i -> acc + i }
     }
 }
-
-
-

@@ -17,5 +17,5 @@ class TrackableValue<E>(initialValue: E) : IStateVariableReference<E>, IValueAcc
         return null
     }
 
-    override fun read(): E  = getValue()
+    override fun read(): E = getValue()
 }

@@ -1,6 +1,5 @@
 package org.modelix.incremental
 
-import kotlinx.coroutines.CoroutineDispatcher
 import kotlin.coroutines.CoroutineContext
 
 expect class ThreadContextVariable<E>() {

@@ -15,7 +15,7 @@ class MNode(val type: String, var role: String? = null) : IStateVariableReferenc
 
     fun getAllChildren(): List<MNode> = children
 
-    fun child(type: String, role: String, initializer: MNode.()->Unit): MNode {
+    fun child(type: String, role: String, initializer: MNode.() -> Unit): MNode {
         val child = MNode(type, role)
         children += child
         DependencyTracking.modified(ChildrenDependency(this, role))

@@ -12,8 +12,8 @@ repositories {
 
 kotlin {
     /* Targets configuration omitted.
-    *  To find out how to configure the targets, please follow the link:
-    *  https://kotlinlang.org/docs/reference/building-mpp-with-gradle.html#setting-up-targets */
+     *  To find out how to configure the targets, please follow the link:
+     *  https://kotlinlang.org/docs/reference/building-mpp-with-gradle.html#setting-up-targets */
 
     jvm {
         jvmToolchain(11)
@@ -68,7 +68,6 @@ kotlin {
     }
 }
 
-
 allOpen {
     annotation("org.openjdk.jmh.annotations.State")
 }
@@ -85,7 +84,7 @@ benchmark {
             iterationTime = 1
             iterationTimeUnit = "s"
             outputTimeUnit = "s"
-            //mode = "avgt"
+            // mode = "avgt"
             reportFormat = "text"
             include(".*")
         }
@@ -121,10 +120,11 @@ publishing {
         if (project.hasProperty("artifacts.itemis.cloud.user")) {
             maven {
                 name = "itemisNexus3"
-                url = if (version.toString().contains("SNAPSHOT"))
-                          uri("https://artifacts.itemis.cloud/repository/maven-mps-snapshots/")
-                      else
-                          uri("https://artifacts.itemis.cloud/repository/maven-mps-releases/")
+                url = if (version.toString().contains("SNAPSHOT")) {
+                    uri("https://artifacts.itemis.cloud/repository/maven-mps-snapshots/")
+                } else {
+                    uri("https://artifacts.itemis.cloud/repository/maven-mps-releases/")
+                }
                 credentials {
                     username = project.findProperty("artifacts.itemis.cloud.user").toString()
                     password = project.findProperty("artifacts.itemis.cloud.pw").toString()

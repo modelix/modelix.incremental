@@ -10,14 +10,17 @@ class IncrementalIndex<K, V> {
     fun update(newEntries: IncrementalList<Pair<K, V>>) {
         val allRemovals = ArrayList<List<Pair<K, V>>>()
         val allInsertions = ArrayList<List<Pair<K, V>>>()
-        newEntries.diff(unsorted, object : IIncrementalListDiffVisitor<Pair<K, V>> {
-            override fun rangeReplaced(index: Int, oldElements: List<Pair<K, V>>, newElements: List<Pair<K, V>>) {
-                removalCounter += oldElements.size
-                insertionCounter += newElements.size
-                allRemovals += oldElements
-                allInsertions += newElements
-            }
-        })
+        newEntries.diff(
+            unsorted,
+            object : IIncrementalListDiffVisitor<Pair<K, V>> {
+                override fun rangeReplaced(index: Int, oldElements: List<Pair<K, V>>, newElements: List<Pair<K, V>>) {
+                    removalCounter += oldElements.size
+                    insertionCounter += newElements.size
+                    allRemovals += oldElements
+                    allInsertions += newElements
+                }
+            },
+        )
         allRemovals.forEach { it.forEach { removeEntry(it) } }
         allInsertions.forEach { it.forEach { addEntry(it) } }
         unsorted = newEntries
