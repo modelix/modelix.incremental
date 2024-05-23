@@ -24,7 +24,7 @@ jobs:
         # Pretend to semantic-release that the PR result is eligible for
         # building releases because --dry-run still filters for configured
         # branches.
-        run: git checkout -b main
+        run: git checkout -b master
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
