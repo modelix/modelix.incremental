@@ -136,8 +136,6 @@ private class IncrementalListSubtree<E>(val children: Array<out IncrementalList<
         } else {
             visitor.rangeReplaced(globalIndex, oldList.toList(), toList())
         }
-
-
     }
 }
 

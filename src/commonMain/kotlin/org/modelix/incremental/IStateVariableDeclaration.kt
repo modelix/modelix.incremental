@@ -4,7 +4,7 @@ interface IStateVariableType<in In, out Out> {
     fun getDefault(): Out
     fun reduce(inputValues: Iterable<In>): Out
 }
-class StateVariableType<in In, out Out>(val defaultValue: Out, val reduceFunction: (Iterable<In>)->Out) : IStateVariableType<In, Out> {
+class StateVariableType<in In, out Out>(val defaultValue: Out, val reduceFunction: (Iterable<In>) -> Out) : IStateVariableType<In, Out> {
     override fun getDefault(): Out {
         return defaultValue
     }

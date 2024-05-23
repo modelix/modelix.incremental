@@ -2,7 +2,10 @@ package org.modelix.incremental
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlin.coroutines.*
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.Continuation
+import kotlin.coroutines.ContinuationInterceptor
+import kotlin.coroutines.CoroutineContext
 
 actual class ThreadContextVariable<E : Any?> actual constructor() {
     private var currentValue: E? = null
@@ -16,7 +19,7 @@ actual class ThreadContextVariable<E : Any?> actual constructor() {
     }
 
     inner class MyContext(
-        private var value: E
+        private var value: E,
     ) : AbstractCoroutineContextElement(ContinuationInterceptor), ContinuationInterceptor {
         @OptIn(ExperimentalStdlibApi::class)
         override fun <T> interceptContinuation(continuation: Continuation<T>): Continuation<T> {
@@ -24,7 +27,7 @@ actual class ThreadContextVariable<E : Any?> actual constructor() {
             return dispatcher.interceptContinuation(Wrapper(continuation))
         }
 
-        inner class Wrapper<T>(private val continuation: Continuation<T>): Continuation<T> {
+        inner class Wrapper<T>(private val continuation: Continuation<T>) : Continuation<T> {
             private inline fun wrap(block: () -> Unit) {
                 currentValue = value
                 block()
@@ -34,7 +37,6 @@ actual class ThreadContextVariable<E : Any?> actual constructor() {
             override fun resumeWith(result: Result<T>) = wrap {
                 continuation.resumeWith(result)
             }
-      }
+        }
     }
-
 }

@@ -8,6 +8,6 @@ interface IIncrementalFunctionContext<RetT> {
     fun <T> writeStateVariable(ref: IStateVariableDeclaration<T, *>, value: T)
 }
 
-fun <T> IIncrementalFunctionContext<T>.readOwnStateVariable(defaultValue: ()->T): T {
+fun <T> IIncrementalFunctionContext<T>.readOwnStateVariable(defaultValue: () -> T): T {
     return readOwnStateVariable().getOrElse(defaultValue)
 }

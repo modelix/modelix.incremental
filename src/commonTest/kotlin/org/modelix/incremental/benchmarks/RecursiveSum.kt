@@ -1,6 +1,10 @@
 package org.modelix.incremental.benchmarks
 
-import kotlinx.benchmark.*
+import kotlinx.benchmark.Benchmark
+import kotlinx.benchmark.Scope
+import kotlinx.benchmark.Setup
+import kotlinx.benchmark.State
+import kotlinx.benchmark.TearDown
 import kotlinx.coroutines.test.runTest
 import org.modelix.incremental.IncrementalEngine
 import org.modelix.incremental.IncrementalFunctionCall2
@@ -56,13 +60,15 @@ abstract class RecursiveSum(val graphSize: Int) {
 
 @State(Scope.Benchmark)
 class RecursiveSum100000() : RecursiveSum(100000)
+
 @State(Scope.Benchmark)
 class RecursiveSum10000() : RecursiveSum(10000)
+
 @State(Scope.Benchmark)
 class RecursiveSum5000() : RecursiveSum(5000)
+
 @State(Scope.Benchmark)
 class RecursiveSum2500() : RecursiveSum(2500)
+
 @State(Scope.Benchmark)
 class RecursiveSum1250() : RecursiveSum(1250)
-
-

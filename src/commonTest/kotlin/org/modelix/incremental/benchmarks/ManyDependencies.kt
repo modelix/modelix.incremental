@@ -1,6 +1,10 @@
 package org.modelix.incremental.benchmarks
 
-import kotlinx.benchmark.*
+import kotlinx.benchmark.Benchmark
+import kotlinx.benchmark.Scope
+import kotlinx.benchmark.Setup
+import kotlinx.benchmark.State
+import kotlinx.benchmark.TearDown
 import kotlinx.coroutines.test.runTest
 import org.modelix.incremental.IncrementalEngine
 import org.modelix.incremental.TrackableList

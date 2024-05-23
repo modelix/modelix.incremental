@@ -3,7 +3,7 @@ package org.modelix.incremental
 abstract class Optional<E> {
     abstract fun hasValue(): Boolean
     abstract fun getValue(): E
-    fun getOrElse(defaultValue: ()->E): E = if (hasValue()) getValue() else defaultValue()
+    fun getOrElse(defaultValue: () -> E): E = if (hasValue()) getValue() else defaultValue()
     fun getOrNull(): E? = if (hasValue()) getValue() else null
     companion object {
         private val EMPTY = EmptyOptional<Any?>()

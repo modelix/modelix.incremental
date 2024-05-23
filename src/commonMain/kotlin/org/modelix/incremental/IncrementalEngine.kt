@@ -1,7 +1,11 @@
 package org.modelix.incremental
 
-import kotlinx.coroutines.*
-import kotlin.collections.HashSet
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 import kotlin.jvm.Synchronized
@@ -70,7 +74,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
                                 val value = (decl as IComputationDeclaration<T>).invoke(IncrementalFunctionContext(evaluation, node) as IIncrementalFunctionContext<T>)
                                 (node as DependencyGraph.ComputationNode<T>).validationSuccessful(value, evaluation.dependencies)
                                 return value
-                            } catch (e : Throwable) {
+                            } catch (e: Throwable) {
                                 node.validationFailed(e, evaluation.dependencies)
                                 throw e
                             }
@@ -83,10 +87,10 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
                                     node.removeDependency(earlierWriter)
                                     update(earlierWriter.key)
                                 }
-                                //TODO("run triggers")
+                                // TODO("run triggers")
                                 node.state = ECacheEntryState.VALID
                                 return node.readValue()
-                            } catch (e : Throwable) {
+                            } catch (e: Throwable) {
                                 node.state = ECacheEntryState.FAILED
                                 throw e
                             }

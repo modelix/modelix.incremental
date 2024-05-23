@@ -2,8 +2,11 @@ package org.modelix.incremental
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
-import kotlin.test.*
 import kotlinx.coroutines.test.runTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.time.ExperimentalTime
 import kotlin.time.measureTime
 
@@ -67,9 +70,11 @@ class IncrementalMathTest {
     fun sideEffects() = runTestAndCleanup {
         val input = (1..3).map { TrackableValue(it) }
         val states = Array<Int>(3) { 0 }
-        val f: IncrementalFunctionCall<Unit> = IncrementalFunctionCall0(IncrementalFunctionImplementation0("f") {
-            states.indices.forEach { states[it] = input[it].getValue() }
-        })
+        val f: IncrementalFunctionCall<Unit> = IncrementalFunctionCall0(
+            IncrementalFunctionImplementation0("f") {
+                states.indices.forEach { states[it] = input[it].getValue() }
+            },
+        )
         assertEquals(listOf(0, 0, 0), states.asList())
 
         val activeOutput = engine.activate(f)
@@ -88,13 +93,12 @@ class IncrementalMathTest {
         input[1].setValue(20)
         engine.flush()
         assertEquals(listOf(10, 2, 30), states.asList())
-
     }
 
     @Test
     fun cycleDetection() = runTestAndCleanup {
         val a = TrackableValue(5)
-        var b: (()->Int)? = null
+        var b: (() -> Int)? = null
         val c = engine.incrementalFunction<Int>("c") {
             b!!() / 2
         }
@@ -110,7 +114,7 @@ class IncrementalMathTest {
     fun parallelComputation() = runTestAndCleanup {
         var primeFactors: ((Int) -> IncrementalFunctionCall1<List<Int>, Int>)? = null
         primeFactors = incrementalFunction<List<Int>, Int>("f") { _, n ->
-            if (n < 2) emptyList() else ((2 .. n / 2).filter { p -> n % p == 0 }).filter { engine.readStateVariable(primeFactors!!(it)).isEmpty() }
+            if (n < 2) emptyList() else ((2..n / 2).filter { p -> n % p == 0 }).filter { engine.readStateVariable(primeFactors!!(it)).isEmpty() }
         }
 
         val b: IntRange = 2..1000
@@ -122,7 +126,7 @@ class IncrementalMathTest {
     fun singleThread() {
         var primeFactors: ((Int) -> List<Int>)? = null
         primeFactors = { n ->
-            if (n < 2) emptyList() else ((2 .. n / 2).filter { p -> n % p == 0 }).filter { primeFactors!!(it).isEmpty() }
+            if (n < 2) emptyList() else ((2..n / 2).filter { p -> n % p == 0 }).filter { primeFactors!!(it).isEmpty() }
         }
 
         val b: IntRange = 2..10000
@@ -144,7 +148,7 @@ class IncrementalMathTest {
         val result = if (n < 2) {
             emptyList()
         } else {
-            ((2 .. n / 2).filter { p -> n % p == 0 }).filter { singleThread2_primeFactors(it).isEmpty() }
+            ((2..n / 2).filter { p -> n % p == 0 }).filter { singleThread2_primeFactors(it).isEmpty() }
         }
         singleThread2_cache[n] = result
         return result
@@ -152,10 +156,13 @@ class IncrementalMathTest {
 
     @Test
     fun incremental10() = incrementalX(10)
+
     @Test
     fun incremental100() = incrementalX(100)
+
     @Test
     fun incremental1000() = incrementalX(1000)
+
     @Test
     fun incremental10000() = incrementalX(10000)
 
@@ -169,8 +176,8 @@ class IncrementalMathTest {
         sum = incrementalFunction<Long, Int, Int>("sum") { _, rangeStart, rangeEnd ->
             if (rangeStart == rangeEnd) {
                 input.get(rangeStart)
-    //            } else if ((rangeEnd - rangeStart) == 1) {
-    //                input.get(rangeStart) + input.get(rangeEnd)
+                //            } else if ((rangeEnd - rangeStart) == 1) {
+                //                input.get(rangeStart) + input.get(rangeEnd)
             } else {
                 val mid = (rangeStart + rangeEnd) / 2
                 val subsums = engine.readStateVariables(listOf(sum!!(rangeStart, mid), sum!!(mid + 1, rangeEnd)))
@@ -178,19 +185,25 @@ class IncrementalMathTest {
             }
         }
 
-        println("Initial: " + measureTime {
-            assertEquals(500500L, engine.readStateVariable(sum!!(0, input.size() - 1)))
-        })
+        println(
+            "Initial: " + measureTime {
+                assertEquals(500500L, engine.readStateVariable(sum!!(0, input.size() - 1)))
+            },
+        )
         println("Graph Size: " + engine.getGraphSize())
         input.set(10, input.get(10) + 13)
         input.set(145, input.get(145) + 7)
         input.set(765, input.get(765) + 23)
-        println("Incremental: " + measureTime {
-            assertEquals(500500L + 13 + 7 + 23, engine.readStateVariable(sum!!(0, input.size() - 1)))
-        })
-        println("Non-incremental: " + measureTime {
-            assertEquals(500500L + 13 + 7 + 23, input.asSequence().sum())
-        })
+        println(
+            "Incremental: " + measureTime {
+                assertEquals(500500L + 13 + 7 + 23, engine.readStateVariable(sum!!(0, input.size() - 1)))
+            },
+        )
+        println(
+            "Non-incremental: " + measureTime {
+                assertEquals(500500L + 13 + 7 + 23, input.asSequence().sum())
+            },
+        )
         println("Graph size: ${engine.getGraphSize()}")
     }
 
@@ -202,22 +215,29 @@ class IncrementalMathTest {
             val sum = (0 until input.size()).asSequence()
                 .map { input.get(it) }
                 .fold(0L) { acc, l -> acc + l }
-            sum / input.size() }
+            sum / input.size()
+        }
         val avgi = engine.incrementalFunction<Long>("avg") { _ ->
             avg()
         }
 
-        println("Initial: " + measureTime {
-            assertEquals(500L, avgi())
-        })
+        println(
+            "Initial: " + measureTime {
+                assertEquals(500L, avgi())
+            },
+        )
         input.set(10, input.get(10) + 100000)
         input.set(145, input.get(145) + 300000)
         input.set(765, input.get(765) + 400000)
-        println("Incremental: " + measureTime {
-            assertEquals(1299L, avgi())
-        })
-        println("Direct: " + measureTime {
-            assertEquals(1299L, avg())
-        })
+        println(
+            "Incremental: " + measureTime {
+                assertEquals(1299L, avgi())
+            },
+        )
+        println(
+            "Direct: " + measureTime {
+                assertEquals(1299L, avg())
+            },
+        )
     }
 }
