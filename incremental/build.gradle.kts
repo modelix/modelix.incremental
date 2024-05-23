@@ -79,7 +79,7 @@ benchmark {
             iterationTime = 1
             iterationTimeUnit = "s"
             outputTimeUnit = "s"
-            //mode = "avgt"
+            // mode = "avgt"
             reportFormat = "text"
             include(".*")
         }

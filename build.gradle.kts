@@ -28,10 +28,11 @@ allprojects {
             if (project.hasProperty("artifacts.itemis.cloud.user")) {
                 maven {
                     name = "itemisNexus3"
-                    url = if (version.toString().contains("SNAPSHOT"))
+                    url = if (version.toString().contains("SNAPSHOT")) {
                         uri("https://artifacts.itemis.cloud/repository/maven-mps-snapshots/")
-                    else
+                    } else {
                         uri("https://artifacts.itemis.cloud/repository/maven-mps-releases/")
+                    }
                     credentials {
                         username = project.findProperty("artifacts.itemis.cloud.user").toString()
                         password = project.findProperty("artifacts.itemis.cloud.pw").toString()
@@ -54,5 +55,4 @@ allprojects {
             }
         }
     }
-
 }
