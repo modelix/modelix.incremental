@@ -29,7 +29,6 @@ kotlin {
                 implementation(kotlin("stdlib-common"))
                 implementation(libs.kotlin.logging)
                 implementation(libs.kotlin.coroutines.core)
-                implementation(libs.kotlin.benchmark.runtime)
                 api(project(":dependency-tracking"))
             }
         }
@@ -38,6 +37,7 @@ kotlin {
                 implementation(libs.kotlin.coroutines.test)
                 implementation(kotlin("test-common"))
                 implementation(kotlin("test-annotations-common"))
+                implementation(libs.kotlin.benchmark.runtime)
             }
         }
         val jvmMain by getting {
