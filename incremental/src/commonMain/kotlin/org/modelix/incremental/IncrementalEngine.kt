@@ -110,7 +110,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
             autoValidator = engineScope.launch {
                 while (!disposed) {
                     val key = graph.autoValidationChannel.receive()
-                    update(key)
+                    runAutoValidation(key)
                 }
             }
         }
@@ -229,6 +229,20 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
         val node = (graph.getNode(key) ?: return) as DependencyGraph.ComputationNode<*>
         // TODO there could be multiple instances for the same key
         node.setAutoValidate(value)
+    }
+
+    @Synchronized
+    private fun isAutoValidate(key: IStateVariableReference<*>): Boolean {
+        val node = (graph.getNode(key) ?: return false) as DependencyGraph.ComputationNode<*>
+        // TODO there could be multiple instances for the same key
+        return node.isAutoValidate()
+    }
+
+    @Synchronized
+    private fun runAutoValidation(key: InternalStateVariableReference<*, *>) {
+        if (disposed) return
+        if (!isAutoValidate(key)) return
+        update(key)
     }
 
     private inner class ObservedOutput<E>(val key: IStateVariableReference<E>) : IActiveOutput<E> {
