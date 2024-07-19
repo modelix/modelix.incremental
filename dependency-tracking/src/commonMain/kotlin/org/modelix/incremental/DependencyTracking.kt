@@ -1,7 +1,7 @@
 package org.modelix.incremental
 
 object DependencyTracking {
-    private val logger = mu.KotlinLogging.logger {}
+    private val logger = io.github.oshai.kotlinlogging.KotlinLogging.logger {}
     private var listeners: List<IDependencyListener> = emptyList()
 
     fun registerListener(l: IDependencyListener) {
