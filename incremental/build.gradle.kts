@@ -48,6 +48,7 @@ kotlin {
             dependencies {
                 implementation(kotlin("test"))
                 implementation(kotlin("test-junit"))
+                implementation(libs.logback.classic)
             }
         }
         val jsMain by getting {

@@ -24,6 +24,8 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
 
     fun getGraphSize() = graph.getSize()
 
+    fun isDisposed() = disposed
+
     private fun checkDisposed() {
         if (disposed) throw IllegalStateException("engine is disposed")
     }
@@ -145,6 +147,7 @@ class IncrementalEngine(val maxSize: Int = 100_000) : IIncrementalEngine, IState
         TODO("Not yet implemented")
     }
 
+    @Synchronized
     fun dispose() {
         if (disposed) return
         disposed = true
