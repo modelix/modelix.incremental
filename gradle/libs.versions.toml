@@ -22,4 +22,4 @@ kotlin-coroutines-swing = { group = "org.jetbrains.kotlinx", name = "kotlinx-cor
 kotlin-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinCoroutines" }
 kotlin-collections-immutable = { group = "org.jetbrains.kotlinx", name = "kotlinx-collections-immutable", version = "0.3.7" }
 kotlin-stdlib-common = { group = "org.jetbrains.kotlin", name = "kotlin-stdlib-common", version.ref = "kotlin" }
-logback-classic = { group = "ch.qos.logback", name = "logback-classic", version = "1.5.7" }
+logback-classic = { group = "ch.qos.logback", name = "logback-classic", version = "1.5.8" }
