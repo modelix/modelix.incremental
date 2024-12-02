@@ -2,7 +2,7 @@
 
 [versions]
 
-kotlin = "2.0.21"
+kotlin = "2.1.0"
 kotlinCoroutines="1.9.0"
 kotlinBenchmark = "0.4.12"
 
