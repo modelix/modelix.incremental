@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
+
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.allopen)
@@ -23,6 +25,12 @@ kotlin {
     }
 
     sourceSets {
+        all {
+            languageSettings {
+                apiVersion = KotlinVersion.KOTLIN_1_6.version
+            }
+        }
+
         val commonMain by getting {
             dependencies {
                 implementation(kotlin("stdlib-common"))
