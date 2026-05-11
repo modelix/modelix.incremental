@@ -3,7 +3,7 @@
 [versions]
 
 kotlin = "2.2.21"
-kotlinCoroutines="1.10.2"
+kotlinCoroutines="1.11.0"
 kotlinBenchmark = "0.4.16"
 
 [plugins]
